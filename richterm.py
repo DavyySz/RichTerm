@@ -48,8 +48,8 @@ DEFAULTS = {
 }
 
 PALETTE = {
-    'fg': '#e6e4df', 'bg': '#1b1e23',
-    'colors': ['#2b3038', '#e5736f', '#8fc48a', '#e0b96a', '#79a8e0', '#c08ad6', '#6fc0c8', '#d6d3cc',
+    'fg': '#e8e6e1', 'bg': '#2b2e33',
+    'colors': ['#3c4148', '#e5736f', '#8fc48a', '#e0b96a', '#79a8e0', '#c08ad6', '#6fc0c8', '#d6d3cc',
                '#5a6270', '#f09590', '#a9d9a4', '#efd08f', '#9dc0f0', '#d5a8e6', '#93d6dd', '#f2f0eb'],
 }
 
