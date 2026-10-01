@@ -14,6 +14,7 @@ rt — Inhalte in die RichTerm-Anzeige schicken.
   rt mermaid 'graph LR; A-->B'        Diagramm
   rt text 'irgendwas'                 Klartext
   rt clear                            Anzeige leeren
+  rt ask 'Frage an Claude'            Frage in den Chat schicken
 
   Optionen:  --title 'Überschrift'   --height 600 (für html/url)   --quiet (Anzeige nicht aufklappen)
   Ohne Argument wird von stdin gelesen:  echo '\sum_i x_i' | rt latex
@@ -64,6 +65,15 @@ def main(argv):
             rest.append(a)
         i += 1
 
+    if kind == 'ask':
+        text = ' '.join(rest) if rest else sys.stdin.read()
+        req = urllib.request.Request('http://127.0.0.1:%s/say' % port, data=json.dumps({'text': text}).encode(),
+                                     headers={'Content-Type': 'application/json'})
+        try:
+            urllib.request.urlopen(req, timeout=3)
+        except Exception as e:  # noqa: BLE001
+            fail('RichTerm nicht erreichbar (%s)' % e)
+        return 0
     if kind == 'clear':
         content = ''
     elif kind in ('image', 'video'):

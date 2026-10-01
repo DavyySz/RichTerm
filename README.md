@@ -1,79 +1,81 @@
 # RichTerm
 
-Ein Terminal mit einer Anzeige daneben, die alles darstellen kann, was ein Browser kann:
-LaTeX-Formeln in Buchqualität, Markdown, Bilder, GIFs, Videos, Diagramme, HTML mit Animationen.
+Chat mit Claude Code wie im Browser, aber mit Zugriff auf deine lokalen Ordner, und ein Terminal
+im selben Fenster. Die Antworten werden direkt im Chat gerendert:
 
-- **Links:** ein vollwertiges Terminal (VTE, dieselbe Engine wie GNOME Terminal), mit Tabs.
-- **Rechts:** die Anzeige (WebKit). Inhalte landen dort als Karten, neueste unten.
-- **`rt`:** der Befehl, mit dem du oder Claude Code Inhalte in die Anzeige schicken.
+- **LaTeX-Formeln** in Buchqualität (KaTeX), inline `$…$` und abgesetzt `$$…$$`
+- **Markdown** mit Überschriften, Tabellen, Codeblöcken
+- **Mermaid-Diagramme** und **SVG**
+- **HTML-Blöcke als Live-Vorschau**: Animationen, Canvas, interaktive Simulationen laufen direkt in der Antwort
+- **Bilder**, die Claude erzeugt (z. B. matplotlib-Plots)
 
-Keine Installation nötig: Es werden nur Python 3 und die auf Linux Mint vorhandenen
-GTK-, VTE- und WebKit-Bindungen benutzt. Die JavaScript-Bibliotheken (KaTeX, marked, mermaid)
-liegen in `vendor/`, alles läuft offline.
+Dazu Tabs mit einem vollwertigen Terminal (VTE, dieselbe Engine wie GNOME Terminal).
+
+Keine Installation nötig: Python 3 plus die auf Linux Mint vorhandenen GTK-, VTE- und WebKit-Bindungen.
+Die JavaScript-Bibliotheken (KaTeX, marked, mermaid) liegen in `vendor/`, alles läuft offline.
+Claude Code (`claude`) muss installiert sein.
 
 ## Starten
 
-- Doppelklick auf **RichTerm** auf dem Desktop, oder über das Anwendungsmenü, oder:
-  ```bash
-  ~/Desktop/RichTerm/start.sh
-  ```
-
-## Inhalte anzeigen
-
+Doppelklick auf **RichTerm** auf dem Desktop, über das Anwendungsmenü, oder:
 ```bash
-rt latex '\frac{1}{1+e^{-z}}'          # Formel (mehrere durch Leerzeilen trennen)
-rt latex -f formeln.tex                # Formeln aus einer Datei
-rt md notizen.md                       # Markdown-Datei, $…$ wird als Formel gesetzt
-rt md -t '# Titel\n\nText mit $x^2$'   # Markdown direkt
-rt image plot.png                      # Bild (PNG, JPG, SVG, GIF – GIFs animieren)
-rt video clip.mp4                      # Video in Schleife
-rt html seite.html                     # HTML-Seite mit eigenem JavaScript, Canvas, Animationen
-rt html -t '<canvas …>'                # HTML direkt
-rt url https://example.org             # Webseite einbetten
-rt mermaid 'graph LR; A-->B-->C'       # Diagramm
-rt text 'Klartext'
-rt clear                               # Anzeige leeren
-echo '\sum_{i=1}^n i' | rt latex       # von stdin
+~/Desktop/RichTerm/start.sh
 ```
 
-Optionen: `--title 'Überschrift'`, `--height 600` (für `html`/`url`), `--quiet` (Anzeige nicht einblenden).
+## Chat
 
-`rt` funktioniert auch aus anderen Terminals heraus, solange RichTerm läuft
-(es findet die laufende Instanz über eine Port-Datei).
+1. Oben links mit 📁 den **Arbeitsordner** wählen. Claude sieht und bearbeitet Dateien in diesem Ordner.
+2. Frage eintippen, **Enter** sendet, **Shift+Enter** macht einen Zeilenumbruch.
+3. Will Claude ein Werkzeug benutzen (Datei schreiben, Befehl ausführen), erscheint eine Frage im Chat
+   mit **Erlauben / Ablehnen**. Mit dem Menü „Berechtigungen“ lässt sich das vorab einstellen.
+4. **■** bricht eine laufende Antwort ab. **Neuer Chat** beginnt eine frische Sitzung.
 
-## Tastenkürzel
+Werkzeugaufrufe (gelesene Dateien, Befehle) erscheinen als graue Zeilen; ein Klick zeigt Details und Ergebnis.
+Bei HTML-Vorschauen: **Code** zeigt den Quelltext, **Im Browser** öffnet die Seite groß.
+
+Kopfzeile: Modell (Standard/Opus/Sonnet/Haiku), Berechtigungen, ☀/☾ hell/dunkel.
+Ctrl + Plus/Minus ändert die Schriftgröße im Chat.
+
+## Terminal
 
 | Taste | Wirkung |
 |---|---|
-| Ctrl+Shift+T | neuer Tab (im aktuellen Verzeichnis) |
-| Ctrl+Shift+W | Tab schließen |
+| Ctrl+Shift+T | neues Terminal (im Arbeitsordner) |
+| Ctrl+Shift+W | Terminal schließen |
 | Ctrl+PgUp / Ctrl+PgDn | Tab wechseln |
+| Ctrl+Shift+Enter | zum Chat springen |
 | Ctrl+Shift+C / Ctrl+Shift+V | kopieren / einfügen (Rechtsklick fügt auch ein) |
 | Ctrl+Shift++ / Ctrl+Shift+- | Terminal-Schrift größer / kleiner |
-| Ctrl+Shift+F | Anzeige ein-/ausblenden |
 | Ctrl+Klick auf Link | Link im Browser öffnen |
 
-In der Anzeige: `A−`/`A+` Schriftgröße, ☀/☾ hell/dunkel, `Leeren`, ✕ an jeder Karte.
-Die Trennlinie zwischen Terminal und Anzeige lässt sich mit der Maus verschieben.
+## `rt`: aus dem Terminal in den Chat
 
-## Mit Claude Code
+```bash
+rt ask 'Erkläre mir Backpropagation'   # Frage an den Chat schicken
+rt latex '\frac{1}{1+e^{-z}}'          # Formel als Karte im Chat
+rt md notizen.md                       # Markdown-Datei anzeigen
+rt image plot.png                      # Bild anzeigen
+rt html seite.html                     # HTML-Seite einbetten
+rt mermaid 'graph LR; A-->B'           # Diagramm
+rt --help                              # alle Möglichkeiten
+```
 
-Claude Code im RichTerm starten wie gewohnt (`claude`). In der Shell ist `RICHTERM=1` gesetzt,
-Claude weiß dann, dass es Formeln, Diagramme und Bilder mit `rt` in die Anzeige schicken kann.
+Funktioniert in den RichTerm-Terminals und in jedem anderen Terminal, solange RichTerm läuft.
 
 ## Aufbau
 
 ```
 RichTerm/
-├── richterm.py        die App (GTK-Fenster, VTE-Tabs, WebKit-Anzeige, HTTP-Empfänger)
-├── bin/rt             der Befehl zum Senden
-├── panel/             die Anzeige-Seite (index.html, panel.css, panel.js)
-├── vendor/            KaTeX, marked, mermaid (offline)
-└── start.sh           Starter (setzt bin/ in den PATH)
+├── richterm.py     App: Fenster, Claude-Code-Sitzung (Streaming), HTTP-Server, Terminal-Tabs
+├── chat/           Chat-Oberfläche (index.html, chat.css, chat.js)
+├── bin/rt          Befehl zum Senden aus dem Terminal
+├── vendor/         KaTeX, marked, mermaid (offline)
+└── start.sh        Starter
 ```
 
-Technik: Die App startet einen HTTP-Server auf `127.0.0.1` mit zufälligem Port und setzt
-`RT_PORT` in jeder Shell. `rt` schickt JSON an `POST /show`, die App reicht es per JavaScript
-an die Anzeige weiter. Lokale Dateien werden über `/file/<pfad>` ausgeliefert, HTML-Karten
-unter `~/.cache/richterm/html/` abgelegt. Einstellungen (Fenstergröße, Schrift, Teilung)
-liegen in `~/.config/richterm.json`.
+Technik: Die App startet `claude -p` im Streaming-Modus (`--input-format/--output-format stream-json`)
+und hält den Prozess über das ganze Gespräch offen. Ereignisse (Textstücke, Werkzeugaufrufe,
+Berechtigungsfragen) werden an die WebKit-Oberfläche weitergereicht; Antworten gehen über
+`control_response` zurück. Ein lokaler HTTP-Server liefert die Oberfläche, lokale Dateien
+(`/file/<pfad>`) und abgelegte HTML-Vorschauen (`~/.cache/richterm/html/`). Einstellungen in
+`~/.config/richterm.json`.

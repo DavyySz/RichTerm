@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>RichTerm Chat</title>
+<link rel="stylesheet" href="../vendor/katex/katex.min.css">
+<link rel="stylesheet" href="chat.css">
+<script src="../vendor/katex/katex.min.js"></script>
+<script src="../vendor/katex/contrib/auto-render.min.js"></script>
+<script src="../vendor/marked/marked.min.js"></script>
+<script src="../vendor/mermaid/mermaid.min.js"></script>
+</head>
+<body>
+<header id="bar">
+  <button id="btn-folder" title="Arbeitsordner wählen (Claude sieht die Dateien darin)">📁 <span id="cwd">~</span></button>
+  <span class="spacer"></span>
+  <select id="model" title="Modell">
+    <option value="">Standard</option>
+    <option value="opus">Opus</option>
+    <option value="sonnet">Sonnet</option>
+    <option value="haiku">Haiku</option>
+  </select>
+  <select id="perm" title="Berechtigungen">
+    <option value="default">Fragen</option>
+    <option value="acceptEdits">Dateien bearbeiten erlauben</option>
+    <option value="bypassPermissions">Alles erlauben</option>
+  </select>
+  <button id="btn-theme" title="Hell/Dunkel">☾</button>
+  <button id="btn-new" title="Neuen Chat beginnen">Neuer Chat</button>
+</header>
+
+<main id="messages">
+  <div class="welcome" id="welcome">
+    <h1>RichTerm</h1>
+    <p>Chat mit Claude Code, mit Zugriff auf deine Dateien. Antworten erscheinen hier mit Formeln,
+       Diagrammen, Bildern und interaktiven Vorschauen.</p>
+    <p class="hint">Oben links den Ordner wählen, in dem Claude arbeiten soll. Enter sendet, Shift+Enter macht einen Zeilenumbruch.</p>
+  </div>
+</main>
+
+<footer id="composer">
+  <div id="status"><span id="status-text"></span></div>
+  <div class="row">
+    <textarea id="input" rows="1" placeholder="Frag etwas … (Enter sendet)"></textarea>
+    <button id="btn-send" title="Senden (Enter)">➤</button>
+    <button id="btn-stop" title="Antwort abbrechen" hidden>■</button>
+  </div>
+</footer>
+
+<template id="tpl-permission">
+  <div class="permission">
+    <div class="perm-head">Claude möchte ein Werkzeug benutzen</div>
+    <div class="perm-body"></div>
+    <div class="perm-actions">
+      <button class="allow">Erlauben</button>
+      <button class="deny">Ablehnen</button>
+    </div>
+  </div>
+</template>
+
+<script src="chat.js"></script>
+</body>
+</html>
