@@ -818,7 +818,16 @@ class RichTerm(Gtk.Window):
                 return True
         return False
 
+    def refresh_models_async(self):
+        """Lokale Modelle im Hintergrund abfragen (Ollama-Start kann Sekunden dauern) und nachreichen."""
+        def work():
+            models = self.model_choices()
+            GLib.idle_add(self.chat_event, {'type': 'models', 'models': models, 'current': self.current_choice()})
+        threading.Thread(target=work, daemon=True).start()
+
     def chat_event(self, ev):
+        if ev.get('type') == 'ready':
+            self.refresh_models_async()
         js = 'window.chatEvent(JSON.parse(%s));' % json.dumps(json.dumps(ev))
         if hasattr(self.web, 'evaluate_javascript'):
             self.web.evaluate_javascript(js, -1, None, None, None, None, None)
@@ -850,17 +859,19 @@ class RichTerm(Gtk.Window):
         return {'type': 'ready', 'cwd': self.cfg['cwd'], 'home': HOME, 'user': os.path.basename(HOME),
                 'model': self.effective('model'), 'perm': self.effective_perm(),
                 'backend': self.profile.get('backend', 'claude'),
-                'models': self.model_choices(), 'current': self.current_choice(),
+                'models': self.model_choices(local=False), 'current': self.current_choice(),
                 'locked': {'model': False, 'perm': bool(self.profile_perm())},
                 'profile': PROFILE_NAME if os.path.exists(os.path.join(self.cfg['cwd'], PROFILE_NAME)) else '',
                 'replay': [{'role': r, 'time': t, 'text': x} for r, t, x in self.history.recent_turns()] if replay else [],
                 'note': note}
 
-    def model_choices(self):
+    def model_choices(self, local=True):
         choices = [{'id': 'claude:', 'group': 'Claude', 'label': 'Claude (Standard)'},
                    {'id': 'claude:opus', 'group': 'Claude', 'label': 'Claude Opus (am stärksten)'},
                    {'id': 'claude:sonnet', 'group': 'Claude', 'label': 'Claude Sonnet (ausgewogen)'},
                    {'id': 'claude:haiku', 'group': 'Claude', 'label': 'Claude Haiku (schnell, günstig)'}]
+        if not local:
+            return choices
         for name, gb in list_local_models():
             choices.append({'id': 'ollama:' + name, 'group': 'Lokal (Ollama, kostenlos, privat)',
                             'label': '%s (%s GB)' % (name, gb)})
@@ -1008,10 +1019,7 @@ class RichTerm(Gtk.Window):
             self.forget_session()
             self.chat_event({'type': 'status', 'text': 'Neuer Chat (ohne Fortsetzung der alten Claude-Sitzung) · Ordner: ' + self.cfg['cwd']})
         elif cmd == 'refresh_models':
-            def work():
-                models = self.model_choices()
-                GLib.idle_add(self.chat_event, {'type': 'models', 'models': models, 'current': self.current_choice()})
-            threading.Thread(target=work, daemon=True).start()
+            self.refresh_models_async()
         elif cmd == 'choose_model':
             self.choose_model(data.get('value', 'claude:'))
         elif cmd == 'pull_model':
