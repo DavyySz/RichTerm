@@ -75,6 +75,9 @@ def load_config():
         pass
     if not os.path.isdir(cfg.get('cwd') or ''):
         cfg['cwd'] = HOME
+    w = cfg.get('window') or [0, 0]
+    if not (isinstance(w, list) and len(w) == 2 and w[0] >= 700 and w[1] >= 450):
+        cfg['window'] = list(DEFAULTS['window'])      # kaputte/zu kleine Werte verwerfen
     return cfg
 
 
@@ -773,6 +776,7 @@ class RichTerm(Gtk.Window):
         self.set_default_size(*self.cfg['window'])
         self.connect('destroy', self.on_quit)
         self.connect('key-press-event', self.on_key)
+        self.connect('size-allocate', self.on_size)      # Fenstergröße laufend merken
 
         self.server = ThreadingHTTPServer(('127.0.0.1', 0), Receiver)
         Receiver.app = self
@@ -1229,9 +1233,13 @@ class RichTerm(Gtk.Window):
             return True
         return False
 
+    def on_size(self, widget, allocation):
+        w, h = self.get_size()
+        if w >= 700 and h >= 450 and not (self.get_window() and
+                                           self.get_window().get_state() & Gdk.WindowState.MAXIMIZED):
+            self.cfg['window'] = [w, h]
+
     def on_quit(self, *a):
-        if self.get_allocated_width():
-            self.cfg['window'] = list(self.get_size())
         save_config(self.cfg)
         self.end_session()
         try:
