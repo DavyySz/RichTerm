@@ -94,6 +94,9 @@ nur das Claude-Backend.
 3. Will Claude ein Werkzeug benutzen (Datei schreiben, Befehl ausführen), erscheint eine Frage im Chat
    mit **Erlauben / Ablehnen**. Mit dem Menü „Berechtigungen“ lässt sich das vorab einstellen.
 4. **■** bricht eine laufende Antwort ab. **Neuer Chat** beginnt eine frische Sitzung.
+5. **Anhänge:** Bilder und Dateien ins Fenster ziehen, mit Ctrl+V einfügen oder über 📎 wählen. Claude sieht Bilder direkt.
+6. **Unter jeder Antwort:** Schnellaktionen (Einfacher · Kürzer · Beispiel · Abfragen) und **Lernzettel speichern**
+   (legt die Antwort als Markdown in `lernzettel/` ab). An Codeblöcken: **Kopieren**.
 
 Werkzeugaufrufe (gelesene Dateien, Befehle) erscheinen als graue Zeilen; ein Klick zeigt Details und Ergebnis.
 Bei HTML-Vorschauen: **Code** zeigt den Quelltext, **Im Browser** öffnet die Seite groß.

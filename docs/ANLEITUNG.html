@@ -83,6 +83,14 @@ richterm                        # RichTerm öffnet sich mit diesem Ordner</code>
   <tr><td>Eingabefeld</td><td><span class="kbd">Enter</span> sendet, <span class="kbd">Shift+Enter</span> macht einen Zeilenumbruch. <b>■</b> bricht eine laufende Antwort ab.</td></tr>
   <tr><td>Statuszeile</td><td>Über dem Eingabefeld: Ordner, Sitzung, Dauer und Kosten der letzten Antwort, Hinweise.</td></tr>
 </table>
+<h3>Anhänge: Bilder und Dateien</h3>
+<p>Bilder (Screenshot einer Folie, Foto vom Tafelanschrieb), PDFs und andere Dateien kannst du an eine Frage anhängen: <b>in das Fenster ziehen</b>, mit <span class="kbd">Ctrl+V</span> <b>einfügen</b> (z. B. einen Screenshot) oder über die <b>📎</b>-Schaltfläche wählen. Die Anhänge erscheinen als kleine Chips über dem Eingabefeld (✕ entfernt sie) und werden mit der nächsten Nachricht gesendet. Claude sieht Bilder direkt (es kann also eine handschriftliche Rechnung lesen und korrigieren); andere Dateien liest es mit seinem Read-Werkzeug. Eingefügte Dateien werden im Arbeitsordner unter <code>richterm-anhang/</code> abgelegt; aus dem Dateimanager gezogene Dateien bleiben, wo sie sind.</p>
+<h3>Unter jeder Antwort</h3>
+<ul>
+  <li><b>Einfacher · Kürzer · Beispiel · Abfragen:</b> Schnellaktionen. Ein Klick stellt die passende Folgefrage („Abfragen“ lässt dich die KI mit Prüfungsfragen abfragen).</li>
+  <li><b>Lernzettel speichern:</b> legt die Antwort als Markdown-Datei (mit Frage, Formeln und Code) in <code>lernzettel/</code> im Arbeitsordner ab. So entsteht aus guten Erklärungen eine eigene Sammlung.</li>
+  <li><b>Kopieren</b> an jedem Codeblock kopiert den ganzen Code.</li>
+</ul>
 <h3>In den Antworten</h3>
 <ul>
   <li><b>Graue Zeilen</b> sind Werkzeugaufrufe (Datei gelesen, Befehl ausgeführt). Ein Klick zeigt Details und das Ergebnis.</li>
@@ -142,7 +150,7 @@ richterm                        # RichTerm öffnet sich mit diesem Ordner</code>
   <tr><td><code>llama3.1:8b</code></td><td>4,9 GB</td><td>Solide Allzweck-Wahl.</td></tr>
   <tr><td><code>qwen2.5:14b</code></td><td>9 GB</td><td>Besser, aber nur 1–3 Wörter/s.</td></tr>
 </table>
-<div class="box"><b>Hintergrund (musst du nicht wissen):</b> RichTerm bringt ein eigenes Ollama mit (unter <code>~/.local/share/ollama</code>, Port 11435) und startet es bei Bedarf selbst. Im RichTerm-Terminal geht auch die Kommandozeile: <code>ollama list</code>, <code>ollama pull name</code>, <code>ollama rm name</code>. Andere KIs mit Kommandozeile lassen sich im Profil über <code>backend: command</code> und <code>command: …</code> anbinden.</div>
+<div class="box"><b>Hintergrund (musst du nicht wissen):</b> Lokale Modelle werden über die Ollama-API angesprochen (Streaming, Gesprächsverlauf innerhalb der Sitzung). Bildfähige lokale Modelle (z. B. <code>llava</code>, <code>qwen2.5vl</code>) bekommen angehängte Bilder ebenfalls. RichTerm bringt ein eigenes Ollama mit (unter <code>~/.local/share/ollama</code>, Port 11435) und startet es bei Bedarf selbst. Im RichTerm-Terminal geht auch die Kommandozeile: <code>ollama list</code>, <code>ollama pull name</code>, <code>ollama rm name</code>. Andere KIs mit Kommandozeile lassen sich im Profil über <code>backend: command</code> und <code>command: …</code> anbinden.</div>
 
 <h2 class="page">6. Gedächtnis und Sitzungen</h2>
 <p>Es gibt zwei Ebenen, die zusammenarbeiten:</p>
@@ -230,6 +238,8 @@ rt --help                               # alle Möglichkeiten</code></pre>
   <tr><td><code>~/Desktop/RichTerm/</code></td><td>Das Programm (Git-Repository): <code>richterm.py</code>, <code>chat/</code>, <code>bin/rt</code>, <code>vendor/</code>, <code>profile_template.md</code>, <code>start.sh</code>, <code>README.md</code>, <code>docs/</code> (diese Anleitung).</td></tr>
   <tr><td><code>&lt;Arbeitsordner&gt;/richterm.md</code></td><td>Profil für diesen Ordner.</td></tr>
   <tr><td><code>&lt;Arbeitsordner&gt;/richterm-verlauf.md</code></td><td>Gedächtnis; <code>richterm-verlauf.archiv.md</code> = verdichtete Rohteile.</td></tr>
+  <tr><td><code>&lt;Arbeitsordner&gt;/lernzettel/</code></td><td>Gespeicherte Antworten (Markdown).</td></tr>
+  <tr><td><code>&lt;Arbeitsordner&gt;/richterm-anhang/</code></td><td>Eingefügte Bilder und Dateien.</td></tr>
   <tr><td><code>~/.config/richterm.json</code></td><td>Fenstergröße, Schrift, letzter Ordner, gemerkte Claude-Sitzungen pro Ordner.</td></tr>
   <tr><td><code>~/.cache/richterm/html/</code></td><td>Abgelegte HTML-Vorschauen (kann gelöscht werden).</td></tr>
   <tr><td><code>~/.local/share/ollama/</code></td><td>Eigenes Ollama (<code>dist/</code>) und Modelle (<code>models/</code>).</td></tr>

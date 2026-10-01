@@ -46,13 +46,26 @@
 
 <footer id="composer">
   <div id="status"><span id="status-text"></span></div>
+  <div id="attachments"></div>
   <div class="row">
-    <textarea id="input" rows="1" placeholder="Frag etwas … (Enter sendet)"></textarea>
+    <button id="btn-attach" title="Datei oder Bild anhängen (auch per Drag &amp; Drop oder Ctrl+V)">📎</button>
+    <input id="file-input" type="file" multiple hidden>
+    <textarea id="input" rows="1" placeholder="Frag etwas … (Enter sendet · Bilder und Dateien hierher ziehen oder einfügen)"></textarea>
     <button id="btn-send" title="Senden (Enter)">➤</button>
     <button id="btn-stop" title="Antwort abbrechen" hidden>■</button>
   </div>
 </footer>
 
+<template id="tpl-actions">
+  <div class="actions">
+    <button data-prompt="Erkläre das Gleiche noch einmal einfacher, mit einem anschaulichen Beispiel aus dem Alltag.">Einfacher</button>
+    <button data-prompt="Fasse deine letzte Antwort in höchstens fünf Sätzen zusammen.">Kürzer</button>
+    <button data-prompt="Gib mir ein konkretes, durchgerechnetes Beispiel zu deiner letzten Antwort.">Beispiel</button>
+    <button data-prompt="Stell mir drei Prüfungsfragen zu deiner letzten Antwort, eine nach der anderen. Warte jeweils auf meine Antwort und korrigiere mich.">Abfragen</button>
+    <span class="grow"></span>
+    <button class="save-note" title="Antwort als Markdown in lernzettel/ speichern">Lernzettel speichern</button>
+  </div>
+</template>
 <template id="tpl-permission">
   <div class="permission">
     <div class="perm-head">Claude möchte ein Werkzeug benutzen</div>

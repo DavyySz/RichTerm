@@ -259,8 +259,8 @@ class ClaudeSession:
                 except (OSError, ValueError):
                     pass
 
-    def send_user(self, text):
-        self._write({'type': 'user', 'message': {'role': 'user', 'content': text}})
+    def send_user(self, content):
+        self._write({'type': 'user', 'message': {'role': 'user', 'content': content}})
 
     def answer_permission(self, request_id, allow, updated_input=None):
         if allow:
@@ -343,6 +343,106 @@ def ensure_ollama_running(timeout=30):
     return False
 
 
+class OllamaSession:
+    """Lokales Modell über die Ollama-API (/api/chat): echtes Streaming, saubere Rollen,
+    Verlauf innerhalb der Sitzung. Wird automatisch statt `ollama run` benutzt."""
+    name = 'Ollama'
+
+    def __init__(self, cwd, model, system_prompt, on_message, on_exit):
+        self.cwd = cwd
+        self.model = model
+        self.on_message = on_message
+        self.on_exit = on_exit
+        self.messages = [{'role': 'system', 'content': system_prompt}]
+        self.history = []
+        self.stderr_tail = ''
+        self.resp = None
+        self.stop = False
+        exe = find_ollama()
+        self.host = OLLAMA_HOST if exe == OLLAMA_LOCAL else os.environ.get('OLLAMA_HOST', '127.0.0.1:11434')
+
+    def send_user(self, content):
+        text, images = content_to_text_and_images(content)
+        msg = {'role': 'user', 'content': text}
+        if images:
+            msg['images'] = images            # base64, für multimodale Modelle (z.B. llava, qwen2.5vl)
+        self.messages.append(msg)
+        self.history.append(('Nutzer', text))
+        self.stop = False
+        threading.Thread(target=self._run, daemon=True).start()
+
+    def _run(self):
+        import urllib.request
+        self.on_message({'type': 'system', 'subtype': 'init', 'model': 'ollama ' + self.model, 'cwd': self.cwd})
+        if not ensure_ollama_running():
+            self.on_message({'type': 'result', 'is_error': True,
+                             'result': 'Ollama ist nicht verfügbar (erwartet unter %s).' % OLLAMA_LOCAL})
+            return
+        body = json.dumps({'model': self.model, 'messages': self.messages, 'stream': True,
+                           'options': {'num_ctx': 8192}}).encode('utf-8')
+        req = urllib.request.Request('http://%s/api/chat' % self.host, data=body,
+                                     headers={'Content-Type': 'application/json'})
+        ev = lambda e: self.on_message({'type': 'stream_event', 'event': e})  # noqa: E731
+        ev({'type': 'message_start'})
+        ev({'type': 'content_block_start', 'index': 0, 'content_block': {'type': 'text', 'text': ''}})
+        answer = []
+        try:
+            self.resp = urllib.request.urlopen(req, timeout=600)
+            for line in self.resp:
+                if self.stop:
+                    break
+                try:
+                    chunk = json.loads(line.decode('utf-8'))
+                except ValueError:
+                    continue
+                piece = (chunk.get('message') or {}).get('content', '')
+                if piece:
+                    answer.append(piece)
+                    ev({'type': 'content_block_delta', 'index': 0, 'delta': {'type': 'text_delta', 'text': piece}})
+                if chunk.get('error'):
+                    answer.append('\n\nFehler: ' + chunk['error'])
+                if chunk.get('done'):
+                    break
+        except Exception as e:  # noqa: BLE001
+            if not self.stop:
+                ev({'type': 'content_block_stop', 'index': 0})
+                self.on_message({'type': 'result', 'is_error': True,
+                                 'result': 'Ollama-Fehler: %s (Modell %s geladen? `ollama list`)' % (e, self.model)})
+                return
+        ev({'type': 'content_block_stop', 'index': 0})
+        full = ''.join(answer).strip()
+        self.messages.append({'role': 'assistant', 'content': full})
+        self.history.append(('Assistent', full))
+        self.on_message({'type': 'result', 'is_error': False})
+
+    def answer_permission(self, *a):
+        pass
+
+    def interrupt(self):
+        self.stop = True
+        try:
+            if self.resp:
+                self.resp.close()
+        except Exception:  # noqa: BLE001
+            pass
+
+    def close(self):
+        self.interrupt()
+
+
+def content_to_text_and_images(content):
+    """Nachrichteninhalt (Text oder Claude-Blockliste) -> (Text, [base64-Bilder])."""
+    if isinstance(content, str):
+        return content, []
+    text, images = [], []
+    for block in content:
+        if block.get('type') == 'text':
+            text.append(block.get('text', ''))
+        elif block.get('type') == 'image':
+            images.append(block.get('source', {}).get('data', ''))
+    return '\n'.join(text), images
+
+
 class CommandSession:
     name = 'Kommandozeilen-KI'
 
@@ -357,7 +457,8 @@ class CommandSession:
         self.stderr_tail = ''
         self.closed = False
 
-    def send_user(self, text):
+    def send_user(self, content):
+        text, _ = content_to_text_and_images(content)
         self.history.append(('Nutzer', text))
         threading.Thread(target=self._run, daemon=True).start()
 
@@ -1011,7 +1112,7 @@ class RichTerm(Gtk.Window):
         if cmd == 'ready':
             self.chat_event(self.ready_event('Bereit · Ordner: ' + self.cfg['cwd'], replay=True))
         elif cmd == 'send':
-            self.send_to_claude(data.get('text', ''))
+            self.send_to_claude(data.get('text', ''), data.get('attachments') or [])
         elif cmd == 'permission':
             if self.session:
                 self.session.answer_permission(data.get('request_id'), data.get('allow'), data.get('input'))
@@ -1045,6 +1146,24 @@ class RichTerm(Gtk.Window):
         elif cmd == 'profile_reload':
             self.reload_profile()
             self.chat_event(self.ready_event('Profil neu geladen · gilt ab der nächsten Nachricht'))
+        elif cmd == 'save_note':
+            import re
+            question = (data.get('question') or '').strip()
+            answer = (data.get('text') or '').strip()
+            if not answer:
+                return
+            folder = os.path.join(self.cfg['cwd'], 'lernzettel')
+            os.makedirs(folder, exist_ok=True)
+            m = re.search(r'^#+\s*(.+)$', answer, re.M)
+            title = (m.group(1) if m else question or 'Lernzettel').strip()[:60]
+            slug = re.sub(r'[^\w-]+', '-', title).strip('-').lower() or 'lernzettel'
+            path = os.path.join(folder, '%s-%s.md' % (datetime.datetime.now().strftime('%Y-%m-%d-%H%M'), slug))
+            with open(path, 'w', encoding='utf-8') as fh:
+                fh.write('# %s\n\n' % title)
+                if question:
+                    fh.write('> **Frage:** %s\n\n' % question.replace('\n', ' '))
+                fh.write(answer.rstrip() + '\n')
+            self.chat_event({'type': 'status', 'text': 'Lernzettel gespeichert: ' + os.path.relpath(path, self.cfg['cwd'])})
         elif cmd == 'copy':
             # Zwischenablage über GTK setzen (Rückfall, falls die Browser-Zwischenablage nicht erlaubt ist)
             Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD).set_text(data.get('text', ''), -1)
@@ -1065,9 +1184,53 @@ class RichTerm(Gtk.Window):
             self.chat_event(self.ready_event('Ordner gewechselt: ' + self.cfg['cwd'] + ' · nächste Nachricht startet dort eine neue Sitzung'))
         dlg.destroy()
 
-    def send_to_claude(self, text):
-        if not text.strip():
+    def store_attachments(self, attachments):
+        """Anhänge (Bilder, PDFs, Dateien) im Arbeitsordner unter richterm-anhang/ ablegen.
+        Gibt (Textzusatz, Bildblöcke) zurück."""
+        import base64
+        import re
+        import urllib.parse
+        notes, blocks = [], []
+        folder = os.path.join(self.cfg['cwd'], 'richterm-anhang')
+        for a in attachments or []:
+            name = os.path.basename(a.get('name') or 'anhang')
+            mime = a.get('mime') or mimetypes.guess_type(name)[0] or 'application/octet-stream'
+            src_path = a.get('path')
+            if src_path and src_path.startswith('file://'):
+                src_path = urllib.parse.unquote(src_path[7:])
+            data = None
+            if src_path and os.path.isfile(src_path):
+                path = src_path                       # Datei liegt schon auf der Platte: direkt verwenden
+                if mime.startswith('image/'):
+                    with open(path, 'rb') as fh:
+                        data = base64.b64encode(fh.read()).decode('ascii')
+            else:
+                raw = a.get('data', '')
+                raw = raw.split(',', 1)[1] if ',' in raw[:80] else raw
+                os.makedirs(folder, exist_ok=True)
+                stamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
+                safe = re.sub(r'[^\w.-]+', '_', name)
+                path = os.path.join(folder, '%s-%s' % (stamp, safe))
+                with open(path, 'wb') as fh:
+                    fh.write(base64.b64decode(raw))
+                if mime.startswith('image/'):
+                    data = raw
+            rel = os.path.relpath(path, self.cfg['cwd'])
+            if mime.startswith('image/') and data:
+                blocks.append({'type': 'image', 'source': {'type': 'base64', 'media_type': mime, 'data': data}})
+                notes.append('[Bild angehängt: %s]' % rel)
+            else:
+                notes.append('[Datei angehängt: %s — lies sie bei Bedarf mit dem Read-Werkzeug]' % rel)
+        return ('\n'.join(notes), blocks)
+
+    def send_to_claude(self, text, attachments=None):
+        if not text.strip() and not attachments:
             return
+        note, blocks = self.store_attachments(attachments)
+        shown = text if not note else (text + '\n' + note).strip()
+        content = shown
+        if blocks:
+            content = [{'type': 'text', 'text': shown}] + blocks
         if self.profile_changed_on_disk():
             # richterm.md wurde gespeichert: automatisch übernehmen, neue Sitzung mit neuem Profil
             self.reload_profile()
@@ -1082,8 +1245,11 @@ class RichTerm(Gtk.Window):
                 prompt += '\n\n' + memory
             try:
                 if self.profile.get('backend', 'claude').lower() == 'command':
-                    self.session = CommandSession(self.cfg['cwd'], self.profile.get('command', ''),
-                                                  self.effective('model'), prompt, on_msg, on_exit)
+                    command = (self.profile.get('command') or '').strip()
+                    if command.startswith('ollama run') or command.startswith('ollama'):
+                        self.session = OllamaSession(self.cfg['cwd'], self.effective('model'), prompt, on_msg, on_exit)
+                    else:
+                        self.session = CommandSession(self.cfg['cwd'], command, self.effective('model'), prompt, on_msg, on_exit)
                 else:
                     self.session = ClaudeSession(self.cfg['cwd'], self.effective('model'),
                                                  self.effective_perm(), self.port,
@@ -1095,9 +1261,10 @@ class RichTerm(Gtk.Window):
                 self.chat_event({'type': 'error', 'text': str(e)})
                 return
         self.recorder.reset()
-        self.recorder.user = text
-        self.chat_event({'type': 'user_sent', 'text': text})
-        self.session.send_user(text)
+        self.recorder.user = shown
+        self.chat_event({'type': 'user_sent', 'text': shown,
+                         'images': [b['source']['data'] and ('data:%s;base64,%s' % (b['source']['media_type'], b['source']['data'])) for b in blocks]})
+        self.session.send_user(content)
 
     def on_session_exit(self, code):
         tail = self.session.stderr_tail if self.session else ''

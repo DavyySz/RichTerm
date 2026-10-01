@@ -8,6 +8,8 @@
   let cwd = '~';
   let counter = 0;
   let current = null;          // laufende Assistenten-Nachricht {el, bubble, text, blocks:{index:{kind,text,el}}}
+  let lastQuestion = '';
+  let attachments = [];        // {name, mime, data?|path?}
   let busy = false;
 
   // ---------- Kommunikation mit der App ----------
@@ -56,7 +58,7 @@
     sel.appendChild(more);
     if (![...sel.options].some(x => x.value === current)) {
       // aktuelles Modell ist (noch) nicht in der Liste, z. B. gerade erst eingetragen
-      const g = groups['Lokal (Ollama, kostenlos, privat)'] || groups['Claude'];
+      const g = groups['Lokal (Ollama, kostenlos, privat)'] || groups['Claude'] || sel;
       const x = document.createElement('option'); x.value = current; x.textContent = current.replace(/^\w+:/, '') || 'Claude (Standard)'; g.appendChild(x);
     }
     sel.value = current;
@@ -190,9 +192,13 @@
     return { el, bubble };
   }
 
-  function addUser(text) {
+  function addUser(text, images) {
     const m = addMessage('user');
     m.bubble.textContent = text;
+    for (const src of images || []) {
+      const img = document.createElement('img'); img.src = src; img.className = 'user-img';
+      m.bubble.appendChild(img);
+    }
     scrollDown(true);
   }
 
@@ -246,12 +252,23 @@
 
   function finishAssistant() {
     if (!current) return;
-    for (const k in current.blocks) {
+    const texts = [];
+    for (const k of Object.keys(current.blocks).sort((a, b) => a - b)) {
       const b = current.blocks[k];
       if (b.kind === 'thinking' && b.el) b.el.remove();
-      if (b.kind === 'text' && b.el) renderMarkdown(b.text, b.el);
+      if (b.kind === 'text' && b.el) { renderMarkdown(b.text, b.el); texts.push(b.text); }
     }
+    const md = texts.join('\n\n').trim();
+    if (md) addActions(current.el, md, lastQuestion);
     current = null;
+  }
+
+  function addActions(msgEl, md, question) {
+    const t = $('tpl-actions').content.cloneNode(true);
+    const bar = t.querySelector('.actions');
+    bar.querySelectorAll('button[data-prompt]').forEach(b => { b.onclick = () => { if (!busy) send({ cmd: 'send', text: b.dataset.prompt }); }; });
+    bar.querySelector('.save-note').onclick = (e) => { send({ cmd: 'save_note', text: md, question }); e.target.textContent = 'Gespeichert ✓'; };
+    msgEl.appendChild(bar);
   }
 
   // ---------- Karten von `rt` ----------
@@ -317,7 +334,8 @@
           $('welcome').hidden = true; messages.appendChild(sep);
           for (const t of ev.replay) {
             const m = addMessage(t.role); m.el.classList.add('replay');
-            if (t.role === 'user') m.bubble.textContent = t.text; else renderMarkdown(t.text, m.bubble);
+            if (t.role === 'user') { m.bubble.textContent = t.text; lastQuestion = t.text; }
+            else { renderMarkdown(t.text, m.bubble); addActions(m.el, t.text, lastQuestion); }
           }
           const sep2 = document.createElement('div'); sep2.className = 'replay-sep'; sep2.textContent = 'Jetzt';
           messages.appendChild(sep2);
@@ -328,7 +346,7 @@
         break;
       case 'card': addCard(ev.msg); break;
       case 'models': fillModels(ev.models || [], ev.current || 'claude:'); break;
-      case 'user_sent': addUser(ev.text); setBusy(true); setStatus('Claude arbeitet …'); break;
+      case 'user_sent': addUser(ev.text, ev.images); lastQuestion = ev.text; setBusy(true); setStatus('Die KI arbeitet …'); break;
       case 'status': setStatus(ev.text); break;
       case 'error': { const m = addMessage('assistant'); m.bubble.innerHTML = '<div class="error">' + escapeHtml(ev.text) + '</div>'; setBusy(false); break; }
       case 'claude': handleClaude(ev.msg); break;
@@ -395,12 +413,64 @@
     }
   }
 
+  // ---------- Anhänge ----------
+  function renderAttachments() {
+    const box = $('attachments');
+    box.innerHTML = '';
+    attachments.forEach((a, i) => {
+      const chip = document.createElement('span'); chip.className = 'chip';
+      if (a.mime && a.mime.startsWith('image/') && a.data) {
+        const img = document.createElement('img'); img.src = a.data; chip.appendChild(img);
+      } else { chip.appendChild(document.createTextNode('📄 ')); }
+      chip.appendChild(document.createTextNode(a.name));
+      const x = document.createElement('button'); x.textContent = '✕'; x.title = 'Entfernen';
+      x.onclick = () => { attachments.splice(i, 1); renderAttachments(); };
+      chip.appendChild(x);
+      box.appendChild(chip);
+    });
+    box.hidden = attachments.length === 0;
+  }
+  function addFile(file) {
+    if (!file) return;
+    if (file.size > 25 * 1024 * 1024) { setStatus('Datei zu groß (max. 25 MB): ' + file.name); return; }
+    const reader = new FileReader();
+    reader.onload = () => { attachments.push({ name: file.name || 'bild.png', mime: file.type || 'application/octet-stream', data: reader.result }); renderAttachments(); };
+    reader.readAsDataURL(file);
+  }
+  function addPaths(uriList) {
+    for (const line of uriList.split(/\r?\n/)) {
+      const u = line.trim();
+      if (!u || u.startsWith('#') || !u.startsWith('file://')) continue;
+      const name = decodeURIComponent(u.split('/').pop());
+      attachments.push({ name, mime: '', path: u });
+    }
+    renderAttachments();
+  }
+  $('btn-attach').onclick = () => $('file-input').click();
+  $('file-input').onchange = (e) => { [...e.target.files].forEach(addFile); e.target.value = ''; };
+  document.addEventListener('paste', (e) => {
+    const items = [...(e.clipboardData && e.clipboardData.items || [])];
+    const files = items.filter(it => it.kind === 'file').map(it => it.getAsFile()).filter(Boolean);
+    if (files.length) { e.preventDefault(); files.forEach(addFile); input.focus(); }
+  });
+  ['dragenter', 'dragover'].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); document.body.classList.add('dragging'); }));
+  ['dragleave', 'drop'].forEach(ev => document.addEventListener(ev, e => { if (ev === 'drop' || e.target === document.body) document.body.classList.remove('dragging'); }));
+  document.addEventListener('drop', (e) => {
+    e.preventDefault();
+    const dt = e.dataTransfer; if (!dt) return;
+    const uris = dt.getData('text/uri-list');
+    if (uris && uris.includes('file://')) addPaths(uris);        // echte Pfade: Datei bleibt, wo sie ist
+    else [...(dt.files || [])].forEach(addFile);
+    input.focus();
+  });
+
   // ---------- Eingabe ----------
   function submit() {
     const text = input.value.trim();
-    if (!text || busy) return;
+    if ((!text && !attachments.length) || busy) return;
     input.value = ''; autosize();
-    send({ cmd: 'send', text });
+    send({ cmd: 'send', text, attachments });
+    attachments = []; renderAttachments();
   }
   function autosize() {
     // Höhe an den Inhalt anpassen: erst zurücksetzen, dann auf die Inhaltshöhe setzen (max. 40 % des Fensters)
