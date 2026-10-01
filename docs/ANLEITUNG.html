@@ -168,7 +168,16 @@ richterm                        # RichTerm öffnet sich mit diesem Ordner</code>
   <li>Unter deiner Frage steht „📚 Unterlagen: …“ mit den verwendeten Dateien und Seiten.</li>
   <li>Das funktioniert mit jedem Modell, auch mit lokalen. Die Dateien bleiben im Ordner; es werden nur die passenden Textausschnitte an das Modell gegeben.</li>
 </ul>
-<div class="box"><b>Praktisch:</b> Frag konkret, mit den Begriffen, die in den Unterlagen vorkommen („Was sagt die Vorlesung zur Lernrate?“, „Fasse Kapitel 3 zusammen“). Je genauer die Frage, desto besser die herausgesuchten Abschnitte. Für PDFs wird das Programm <code>pdftotext</code> gebraucht (Linux: Paket <code>poppler-utils</code>, meist vorhanden; macOS: <code>brew install poppler</code>). Im Profil: <code>rag: false</code> schaltet es ab, <code>rag_chunks</code> (Standard 6) bestimmt, wie viele Abschnitte pro Frage mitgehen.</div>
+<h3>Wie die Suche arbeitet</h3>
+<p>Die Suche ist hybrid: Sie findet Stichwörter (BM25) <b>und</b> Bedeutung. Für Letzteres lädt RichTerm beim ersten Mal automatisch ein kleines Einbettungsmodell über Ollama (<code>embeddinggemma</code>, 620 MB, mehrsprachig, läuft offline). Damit findet „Wie groß ist die Schrittweite?“ auch eine Folie, auf der „Lernrate“ steht, und Fragen ohne Bezug zu den Unterlagen („Hauptstadt von Peru“) liefern keine Treffer, statt irgendetwas hineinzuzwingen. Ist kein Ollama da, bleibt die Stichwortsuche.</p>
+<table>
+  <tr><th>Profil-Einstellung</th><th>Wirkung</th></tr>
+  <tr><td><code>rag: false</code></td><td>Unterlagen-Suche aus.</td></tr>
+  <tr><td><code>rag_chunks: 6</code></td><td>Wie viele Abschnitte pro Frage mitgehen.</td></tr>
+  <tr><td><code>rag_strict: true</code></td><td><b>Strenger Modus:</b> Die KI antwortet nur aus den Unterlagen, jede Aussage mit Quelle; steht etwas nicht drin, sagt sie das, statt eigenes Wissen zu ergänzen. Gut für „Was hat der Prof gesagt?“.</td></tr>
+</table>
+<p><b>Ganze Datei mitgeben:</b> Schreib <code>@vorlesung_03.pdf</code> (oder einen Anfang des Namens, <code>@vorlesung_03</code>) in die Frage, dann bekommt die KI die komplette Datei statt nur Treffer. Das ist der Weg für „Fasse die Vorlesung zusammen“. Bei Claude passen sehr lange Dateien hinein, bei lokalen Modellen wird nach etwa 12 000 Zeichen gekürzt.</p>
+<div class="box"><b>Praktisch:</b> Die Zeile „📚 Unterlagen: …“ unter deiner Frage zeigt, was mitgeschickt wurde. Fehlt sie, wurde nichts Passendes gefunden, und die Antwort kommt nicht aus deinen Unterlagen. Für PDFs wird <code>pdftotext</code> gebraucht (Linux: Paket <code>poppler-utils</code>, meist vorhanden; macOS: <code>brew install poppler</code>).</div>
 
 <h2>7. Gedächtnis und Sitzungen</h2>
 <p>Es gibt zwei Ebenen, die zusammenarbeiten:</p>

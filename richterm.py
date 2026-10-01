@@ -670,13 +670,59 @@ def _chunk(text, size=900, overlap=150):
     return [c for c in chunks if c]
 
 
+EMBED_MODEL = 'embeddinggemma'          # mehrsprachig, 622 MB, trennt deutsche Fragen sauber
+EMBED_QUERY_PREFIX = 'task: search result | query: '
+EMBED_DOC_PREFIX = 'title: none | text: '
+EMBED_MIN_SIM = 0.22                    # darunter gilt ein Abschnitt als nicht passend
+
+
+def ollama_host():
+    exe = find_ollama()
+    return OLLAMA_HOST if exe == OLLAMA_LOCAL else os.environ.get('OLLAMA_HOST', '127.0.0.1:11434')
+
+
+def embed_texts(texts, timeout=300, query=False):
+    """Einbettungen über Ollama (EMBED_MODEL). -> Liste von Vektoren oder None, wenn nicht verfügbar."""
+    import urllib.request
+    if not texts or not find_ollama():
+        return None
+    texts = [(EMBED_QUERY_PREFIX if query else EMBED_DOC_PREFIX) + t for t in texts]
+    try:
+        if not ensure_ollama_running(timeout=8):
+            return None
+        body = json.dumps({'model': EMBED_MODEL, 'input': texts}).encode('utf-8')
+        req = urllib.request.Request('http://%s/api/embed' % ollama_host(), data=body,
+                                     headers={'Content-Type': 'application/json'})
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            vecs = json.load(resp).get('embeddings')
+        if not vecs or len(vecs) != len(texts):
+            return None
+        return [[round(x, 5) for x in v] for v in vecs]
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def embed_model_available():
+    return any(name.split(':')[0] == EMBED_MODEL for name, _ in list_local_models())
+
+
+def _cosine(a, b):
+    import math
+    dot = sum(x * y for x, y in zip(a, b))
+    na = math.sqrt(sum(x * x for x in a)) or 1.0
+    nb = math.sqrt(sum(y * y for y in b)) or 1.0
+    return dot / (na * nb)
+
+
 class Rag:
-    def __init__(self, cwd, dirname=RAG_DIRNAME, top_k=6):
+    def __init__(self, cwd, dirname=RAG_DIRNAME, top_k=6, strict=False):
         self.dir = os.path.join(cwd, dirname)
         self.index_path = os.path.join(self.dir, '.richterm-index.json')
         self.top_k = top_k
+        self.strict = strict
         self.lock = threading.Lock()
-        self.docs = {}            # datei -> {'mtime':..., 'chunks':[{'page':..,'text':..}]}
+        self.docs = {}            # datei -> {'mtime':..., 'chunks':[{'page':..,'text':..,'vec':[...]}]}
+        self.use_embeddings = None   # None = noch nicht geprüft
         self._load_index()
 
     def exists(self):
@@ -685,14 +731,23 @@ class Rag:
     def _load_index(self):
         try:
             with open(self.index_path, encoding='utf-8') as fh:
-                self.docs = json.load(fh)
+                data = json.load(fh)
+            if data.get('_embed_model') != EMBED_MODEL:        # anderes Suchmodell: Vektoren neu berechnen
+                for d in data.values():
+                    if isinstance(d, dict):
+                        for c in d.get('chunks', []):
+                            c.pop('vec', None)
+            data.pop('_embed_model', None)
+            self.docs = {k: v for k, v in data.items() if isinstance(v, dict)}
         except (OSError, ValueError):
             self.docs = {}
 
     def _save_index(self):
         try:
+            data = dict(self.docs)
+            data['_embed_model'] = EMBED_MODEL
             with open(self.index_path, 'w', encoding='utf-8') as fh:
-                json.dump(self.docs, fh)
+                json.dump(data, fh)
         except OSError:
             pass
 
@@ -732,21 +787,66 @@ class Rag:
                 if rel not in present:
                     del self.docs[rel]
                     changed = True
+            # Einbettungen für Abschnitte ohne Vektor nachholen (semantische Suche), falls das Modell da ist
+            if self.use_embeddings is None:
+                self.use_embeddings = embed_model_available()
+            if self.use_embeddings:
+                todo = [c for d in self.docs.values() for c in d['chunks'] if 'vec' not in c]
+                for i in range(0, len(todo), 32):
+                    batch = todo[i:i + 32]
+                    vecs = embed_texts([c['text'] for c in batch])
+                    if not vecs:
+                        break
+                    for c, v in zip(batch, vecs):
+                        c['vec'] = v
+                    changed = True
             if changed:
                 self._save_index()
             n_chunks = sum(len(d['chunks']) for d in self.docs.values())
         return len(self.docs), n_chunks, changed
 
     def search(self, query, k=None):
-        """BM25 über alle Abschnitte -> [(score, datei, seite, text)]"""
-        import math
-        q = _tokens(query)
-        if not q or not self.docs:
-            return []
+        """Hybride Suche: BM25 (Stichwörter) + Einbettungen (Bedeutung), zusammengeführt per Reciprocal Rank Fusion.
+        -> [(score, datei, seite, text)]"""
         k = k or self.top_k
         with self.lock:
-            entries = [(rel, c['page'], c['text']) for rel, d in self.docs.items() for c in d['chunks']]
+            entries = [(rel, c['page'], c['text'], c.get('vec')) for rel, d in self.docs.items() for c in d['chunks']]
         if not entries:
+            return []
+        bm = self._bm25(query, [(r, p, t) for r, p, t, _ in entries])
+        ranks = {}
+        for rank, (sc, i) in enumerate(bm):
+            ranks[i] = ranks.get(i, 0) + 1.0 / (60 + rank)
+        if self.use_embeddings and any(v for _, _, _, v in entries):
+            qv = embed_texts([query], query=True)
+            if qv:
+                sims = sorted(((_cosine(qv[0], v), i) for i, (_, _, _, v) in enumerate(entries) if v), reverse=True)
+                for rank, (sim, i) in enumerate(sims[:max(k * 4, 20)]):
+                    if sim >= EMBED_MIN_SIM:
+                        ranks[i] = ranks.get(i, 0) + 1.0 / (60 + rank)
+        best = sorted(ranks.items(), key=lambda x: -x[1])[:k]
+        return [(sc, entries[i][0], entries[i][1], entries[i][2]) for i, sc in best]
+
+    def full_text(self, name, max_chars):
+        """Ganze Datei (per @name angefordert): -> (label, text) oder None"""
+        name = name.lower().lstrip('@')
+        with self.lock:
+            for rel, d in self.docs.items():
+                base = os.path.basename(rel).lower()
+                if base == name or base.startswith(name) or rel.lower() == name:
+                    parts = []
+                    for c in d['chunks']:
+                        parts.append(('[%s] ' % c['page'] if c['page'] else '') + c['text'])
+                    text = '\n\n'.join(parts)
+                    if len(text) > max_chars:
+                        text = text[:max_chars] + '\n\n[… gekürzt, Datei ist länger …]'
+                    return rel, text
+        return None
+
+    def _bm25(self, query, entries):
+        import math
+        q = _tokens(query)
+        if not q:
             return []
         toks = [_tokens(t) for _, _, t in entries]
         n = len(entries)
@@ -772,22 +872,42 @@ class Rag:
             if score > 0:
                 scores.append((score, i))
         scores.sort(reverse=True)
-        return [(sc, entries[i][0], entries[i][1], entries[i][2]) for sc, i in scores[:k]]
+        return scores[:max(self.top_k * 4, 20)]
 
-    def context_for(self, question):
+    def context_for(self, question, max_full_chars=60000):
         """-> (kontextblock für das modell, [quellenliste für die anzeige])"""
-        hits = self.search(question)
-        if not hits:
-            return '', []
+        import re
         parts, sources = [], []
+        # @datei.pdf in der Frage: ganze Datei mitgeben
+        for name in re.findall(r'@([\w][\w.\-]*)', question):
+            ft = self.full_text(name, max_full_chars)
+            if ft:
+                rel, text = ft
+                parts.append('[Datei %s, vollständig]\n%s' % (rel, text))
+                sources.append(rel + ' (ganz)')
+        hits = self.search(question)
         for n, (sc, rel, page, text) in enumerate(hits, 1):
             label = rel + (' ' + page if page else '')
+            if any(src.startswith(rel + ' (ganz)') for src in sources):
+                continue
             parts.append('[%d] %s\n%s' % (n, label, text))
             if label not in sources:
                 sources.append(label)
-        block = ('Auszüge aus den Unterlagen des Nutzers (Ordner rag/). Nutze sie als Hauptquelle, zitiere die '
-                 'Quelle in eckigen Klammern (z.B. [1] oder "laut vorlesung_03.pdf S. 4"), und sag es, wenn die '
-                 'Unterlagen die Frage nicht abdecken.\n\n' + '\n\n'.join(parts))
+        if not parts:
+            if self.strict:
+                return ('Zu dieser Frage wurden KEINE passenden Stellen in den Unterlagen (Ordner rag/) gefunden. '
+                        'Strenger Modus: Antworte, dass die Unterlagen dazu nichts enthalten, und beantworte die Frage '
+                        'nicht aus eigenem Wissen (außer der Nutzer bittet ausdrücklich darum).'), []
+            return '', []
+        if self.strict:
+            rule = ('Strenger Modus: Beantworte die Frage AUSSCHLIESSLICH aus diesen Auszügen. Jede Aussage bekommt eine '
+                    'Quellenangabe (z.B. [2] oder "laut vorlesung_03.pdf S. 4"). Steht etwas nicht in den Auszügen, '
+                    'sag ausdrücklich "Dazu steht nichts in den Unterlagen" statt aus eigenem Wissen zu ergänzen.')
+        else:
+            rule = ('Nutze sie als Hauptquelle und zitiere die Quelle (z.B. [1] oder "laut vorlesung_03.pdf S. 4"). '
+                    'Ergänzt du etwas aus eigenem Wissen, kennzeichne es als solches. Sag es, wenn die Unterlagen die '
+                    'Frage nicht abdecken.')
+        block = 'Auszüge aus den Unterlagen des Nutzers (Ordner rag/). ' + rule + '\n\n' + '\n\n'.join(parts)
         return block, sources
 
 # ----------------------------------------------------------------------------
@@ -1340,15 +1460,32 @@ class Core:
             k = int(self.profile.get('rag_chunks') or 6)
         except ValueError:
             k = 6
-        rag = Rag(self.cfg['cwd'], self.profile.get('rag_dir') or RAG_DIRNAME, k) if enabled else None
+        strict = str(self.profile.get('rag_strict', 'false')).lower() in ('true', 'yes', 'ja', '1', 'on')
+        rag = Rag(self.cfg['cwd'], self.profile.get('rag_dir') or RAG_DIRNAME, k, strict) if enabled else None
         if rag and rag.exists():
             threading.Thread(target=self.rag_refresh, args=(rag,), daemon=True).start()
         return rag
+
+    def ensure_embed_model(self):
+        """Einbettungsmodell für die semantische Suche einmalig laden (klein, offline), falls Ollama da ist."""
+        if not find_ollama() or embed_model_available() or getattr(self, '_embed_pulling', False):
+            return
+        self._embed_pulling = True
+        exe = find_ollama()
+        self.ui(self.chat_event, {'type': 'status', 'text': 'Lade Suchmodell %s für die Unterlagen (einmalig, ~620 MB) …' % EMBED_MODEL})
+        p = subprocess.run([exe, 'pull', EMBED_MODEL], env=ollama_env(os.environ), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self._embed_pulling = False
+        if p.returncode == 0 and self.rag:
+            self.rag.use_embeddings = True
+            self.rag.refresh()
+            self.ui(self.chat_event, {'type': 'status', 'text': 'Suchmodell geladen: Unterlagen werden jetzt auch nach Bedeutung durchsucht.'})
 
     def rag_refresh(self, rag=None):
         rag = rag or self.rag
         if not rag or not rag.exists():
             return
+        if find_ollama() and not embed_model_available():
+            self.ensure_embed_model()
         files, chunks, changed = rag.refresh()
         if changed:
             self.ui(self.chat_event, {'type': 'status', 'text': 'Unterlagen indexiert: %d Dateien, %d Abschnitte (rag/)' % (files, chunks)})
@@ -1519,7 +1656,8 @@ class Core:
         rag_block, sources = '', []
         if self.rag and self.rag.exists():
             self.rag.refresh()
-            rag_block, sources = self.rag.context_for(text)
+            is_cloud = self.profile.get('backend', 'claude').lower() != 'command'
+            rag_block, sources = self.rag.context_for(text, max_full_chars=80000 if is_cloud else 12000)
         model_text = (rag_block + '\n\n---\n\nFrage des Nutzers:\n' + shown) if rag_block else shown
         content = model_text
         if blocks:

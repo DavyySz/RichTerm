@@ -88,7 +88,12 @@ passendsten Abschnitte mit Quellenangabe mit; die Antwort zitiert dann „laut v
 deiner Frage steht, welche Unterlagen verwendet wurden. Das funktioniert mit jedem Modell, auch lokal, und
 die Dateien bleiben, wo sie sind. Neue oder geänderte Dateien werden automatisch neu indexiert
 (Index: `rag/.richterm-index.json`). Für PDFs wird `pdftotext` gebraucht (Paket `poppler-utils`, macOS `brew install poppler`).
-Im Profil: `rag: false` schaltet es ab, `rag_chunks` bestimmt, wie viele Abschnitte pro Frage mitgehen (Standard 6).
+Die Suche ist **hybrid**: Stichwörter (BM25) plus Bedeutung über ein kleines lokales Einbettungsmodell
+(`embeddinggemma`, 620 MB, wird beim ersten Mal automatisch über Ollama geladen); „Schrittweite“ findet so auch
+„Lernrate“, und Fragen ohne Bezug zu den Unterlagen liefern keine Treffer. Im Profil: `rag: false` schaltet es ab,
+`rag_chunks` bestimmt, wie viele Abschnitte pro Frage mitgehen (Standard 6), `rag_strict: true` erzwingt Antworten
+**nur** aus den Unterlagen („dazu steht nichts in den Unterlagen“ statt eigenem Wissen). `@vorlesung_03.pdf` in der
+Frage gibt die ganze Datei mit, z. B. für Zusammenfassungen.
 
 ## Gedächtnis: `richterm-verlauf.md`
 

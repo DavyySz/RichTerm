@@ -49,6 +49,10 @@ context_chars: 20000
 # Funktioniert mit jedem Modell, auch lokal. rag_chunks = wie viele Abschnitte pro Frage.
 rag: true
 rag_chunks: 6
+# Strenger Modus: nur aus den Unterlagen antworten, sonst "steht nicht in den Unterlagen".
+# Gut für Klausurvorbereitung, wenn nur zählt, was der Prof gesagt hat.
+rag_strict: false
+# Tipp: "@vorlesung_03.pdf" in der Frage gibt die ganze Datei mit (für Zusammenfassungen).
 ---
 
 # Rolle
