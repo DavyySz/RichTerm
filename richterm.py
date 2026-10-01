@@ -257,9 +257,13 @@ class Receiver(BaseHTTPRequestHandler):
 # Hauptfenster
 # ----------------------------------------------------------------------------
 class RichTerm(Gtk.Window):
-    def __init__(self):
+    def __init__(self, start_dir=None):
         super().__init__(title='RichTerm')
         self.cfg = load_config()
+        if start_dir and os.path.isdir(start_dir):
+            # Startordner aus der Kommandozeile (z.B. `richterm` im aktuellen Verzeichnis)
+            self.cfg['cwd'] = os.path.abspath(start_dir)
+            save_config(self.cfg)
         self.session = None
         self.set_default_size(*self.cfg['window'])
         self.connect('destroy', self.on_quit)
@@ -283,6 +287,7 @@ class RichTerm(Gtk.Window):
 
         self.web = self.build_chat()
         self.notebook.append_page(self.web, Gtk.Label(label='Chat'))
+        self.set_title('RichTerm — ' + self.cfg['cwd'].replace(HOME, '~'))
         self.show_all()
 
     # --- Chat ----------------------------------------------------------------
@@ -534,7 +539,12 @@ class RichTerm(Gtk.Window):
 
 
 def main():
-    app = RichTerm()
+    args = [a for a in sys.argv[1:] if not a.startswith('-')]
+    if '-h' in sys.argv or '--help' in sys.argv:
+        print(__doc__)
+        print('Aufruf: richterm [ORDNER]   — startet RichTerm mit ORDNER als Arbeitsordner (Standard: aktueller Ordner)')
+        return 0
+    app = RichTerm(args[0] if args else None)
     try:
         Gtk.main()
     except KeyboardInterrupt:

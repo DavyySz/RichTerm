@@ -17,10 +17,16 @@ Claude Code (`claude`) muss installiert sein.
 
 ## Starten
 
-Doppelklick auf **RichTerm** auf dem Desktop, über das Anwendungsmenü, oder:
+Der übliche Weg: ein Terminal im gewünschten Ordner öffnen (z.&nbsp;B. dem mit den Vorlesungsfolien) und
+
 ```bash
-~/Desktop/RichTerm/start.sh
+richterm              # RichTerm mit diesem Ordner als Arbeitsordner
+richterm ~/Uni/ML     # oder einen Ordner angeben
 ```
+
+Das Terminal bleibt frei und darf geschlossen werden. Außerdem:
+- Rechtsklick im Dateimanager (Nemo) auf einen Ordner oder in einen Ordner → **RichTerm hier öffnen**
+- Doppelklick auf **RichTerm** auf dem Desktop oder im Anwendungsmenü (startet im Home-Ordner)
 
 ## Chat
 
