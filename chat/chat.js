@@ -85,12 +85,13 @@
       if (lang === 'html') {
         return '<div class="preview" data-code="' + escapeHtml(code) + '">' +
           '<div class="preview-head"><span>Live-Vorschau</span><span class="grow"></span>' +
-          '<button class="pv-code">Code</button><button class="pv-reload">Neu laden</button>' +
+          '<button class="pv-code">Code</button><button class="pv-copy">Kopieren</button><button class="pv-reload">Neu laden</button>' +
           '<button class="pv-open">Im Browser</button></div>' +
           '<iframe sandbox="allow-scripts allow-same-origin"></iframe>' +
           '<pre hidden><code>' + escapeHtml(code) + '</code></pre></div>';
       }
-      const label = lang ? '<span class="code-lang">' + escapeHtml(lang) + '</span>' : '';
+      const label = '<span class="code-tools">' + (lang ? '<span class="code-lang">' + escapeHtml(lang) + '</span>' : '') +
+        '<button class="copy-btn" title="Code kopieren">Kopieren</button></span>';
       return '<pre>' + label + '<code class="language-' + escapeHtml(lang) + '">' + escapeHtml(code) + '</code></pre>';
     };
     let html = marked.parse(protectedSrc, { gfm: true, breaks: false, renderer });
@@ -105,7 +106,23 @@
     });
     target.querySelectorAll('.preview').forEach(setupPreview);
     if (final) highlightCode(target);      // beim Streamen noch nicht (wird bei jedem Textstück neu gerendert)
+    setupCopyButtons(target);
     renderMermaidIn(target);
+  }
+
+  // Kopierknopf an Codeblöcken
+  function copyText(text, btn) {
+    const done = () => { btn.textContent = 'Kopiert ✓'; setTimeout(() => { btn.textContent = 'Kopieren'; }, 1500); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(() => { send({ cmd: 'copy', text }); done(); });
+    } else { send({ cmd: 'copy', text }); done(); }
+  }
+  function setupCopyButtons(root) {
+    root.querySelectorAll('pre .copy-btn').forEach(btn => {
+      if (btn.dataset.ready) return;
+      btn.dataset.ready = '1';
+      btn.onclick = (e) => { e.stopPropagation(); const code = btn.closest('pre').querySelector('code'); copyText(code ? code.textContent : '', btn); };
+    });
   }
 
   // Syntax-Hervorhebung (highlight.js, ~190 Sprachen; unbekannte Sprache -> automatische Erkennung)
@@ -153,6 +170,7 @@
       } catch (e) { frame.srcdoc = code; }
     };
     box.querySelector('.pv-code').onclick = () => { pre.hidden = !pre.hidden; frame.hidden = !pre.hidden; };
+    box.querySelector('.pv-copy').onclick = (e) => copyText(code, e.target);
     box.querySelector('.pv-reload').onclick = load;
     box.querySelector('.pv-open').onclick = () => send({ cmd: 'open', url: box.dataset.url || '' });
     const h = /data-height="(\d+)"|<!--\s*height:\s*(\d+)/i.exec(code);

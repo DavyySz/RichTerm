@@ -1045,6 +1045,9 @@ class RichTerm(Gtk.Window):
         elif cmd == 'profile_reload':
             self.reload_profile()
             self.chat_event(self.ready_event('Profil neu geladen · gilt ab der nächsten Nachricht'))
+        elif cmd == 'copy':
+            # Zwischenablage über GTK setzen (Rückfall, falls die Browser-Zwischenablage nicht erlaubt ist)
+            Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD).set_text(data.get('text', ''), -1)
         elif cmd == 'open':
             url = data.get('url', '')
             if url:
