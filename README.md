@@ -11,6 +11,8 @@ im selben Fenster. Die Antworten werden direkt im Chat gerendert:
 
 Dazu Tabs mit einem vollwertigen Terminal (VTE, dieselbe Engine wie GNOME Terminal).
 
+**Ausführliche Bedienungsanleitung:** [`docs/ANLEITUNG.pdf`](docs/ANLEITUNG.pdf) (Quelle `docs/ANLEITUNG.html`, neu bauen mit `docs/build.sh`).
+
 Keine Installation nötig: Python 3 plus die auf Linux Mint vorhandenen GTK-, VTE- und WebKit-Bindungen.
 Die JavaScript-Bibliotheken (KaTeX, marked, mermaid) liegen in `vendor/`, alles läuft offline.
 Claude Code (`claude`) muss installiert sein.

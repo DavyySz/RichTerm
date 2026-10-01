@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>RichTerm – Bedienungsanleitung</title>
+<style>
+  @page { size: A4; margin: 20mm 18mm 22mm 18mm; }
+  html { font-size: 10.5pt; }
+  body { font-family: "DejaVu Serif", Georgia, serif; color: #1d2126; line-height: 1.5; margin: 0; }
+  h1 { font-size: 24pt; margin: 0 0 4pt; letter-spacing: -0.01em; }
+  .sub { color: #5b636c; margin: 0 0 18pt; font-size: 11pt; }
+  h2 { font-size: 15pt; margin: 22pt 0 8pt; padding-bottom: 3pt; border-bottom: 1.5px solid #1f6f78; color: #1f6f78; page-break-after: avoid; }
+  h3 { font-size: 11.5pt; margin: 14pt 0 5pt; page-break-after: avoid; }
+  p { margin: 0 0 7pt; }
+  ul, ol { margin: 0 0 8pt; padding-left: 20pt; }
+  li { margin-bottom: 2pt; }
+  code { font-family: "DejaVu Sans Mono", monospace; font-size: 9pt; background: #eeede8; padding: 0 3pt; border-radius: 2pt; }
+  pre { font-family: "DejaVu Sans Mono", monospace; font-size: 8.8pt; background: #f1f0eb; border-left: 3px solid #1f6f78; padding: 7pt 10pt; margin: 6pt 0 10pt; white-space: pre-wrap; page-break-inside: avoid; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 6pt 0 12pt; font-size: 9.5pt; page-break-inside: avoid; }
+  th, td { border: 1px solid #cfcbc2; padding: 4pt 7pt; vertical-align: top; text-align: left; }
+  th { background: #e3eff0; font-family: "DejaVu Sans", sans-serif; font-size: 9pt; }
+  .box { border: 1px solid #cfcbc2; background: #fbfaf7; padding: 8pt 12pt; margin: 8pt 0 12pt; page-break-inside: avoid; }
+  .box b { color: #1f6f78; }
+  .toc { columns: 2; font-size: 9.5pt; margin-bottom: 10pt; }
+  .toc div { margin-bottom: 2pt; }
+  .kbd { font-family: "DejaVu Sans Mono", monospace; font-size: 8.8pt; border: 1px solid #b9b5ac; border-bottom-width: 2px; border-radius: 3pt; padding: 0 4pt; background: #fff; white-space: nowrap; }
+  .page { page-break-before: always; }
+  footer { margin-top: 24pt; color: #5b636c; font-size: 9pt; border-top: 1px solid #cfcbc2; padding-top: 6pt; }
+</style>
+</head>
+<body>
+
+<h1>RichTerm – Bedienungsanleitung</h1>
+<p class="sub">Chat mit Claude Code (oder einer lokalen KI) mit gerenderten Formeln, Diagrammen und Animationen, plus Terminal, in einem Fenster. Stand: Oktober 2026.</p>
+
+<div class="toc">
+  <div>1. Was RichTerm ist</div>
+  <div>2. Starten</div>
+  <div>3. Die Oberfläche</div>
+  <div>4. Das Profil: richterm.md</div>
+  <div>5. Modelle wählen und laden</div>
+  <div>6. Gedächtnis und Sitzungen</div>
+  <div>7. Berechtigungen</div>
+  <div>8. Das Terminal und der Befehl rt</div>
+  <div>9. Tastenkürzel</div>
+  <div>10. Typische Arbeitsabläufe</div>
+  <div>11. Probleme und Lösungen</div>
+  <div>12. Dateien im Überblick</div>
+</div>
+
+<h2>1. Was RichTerm ist</h2>
+<p>RichTerm ist ein Fenster mit zwei Arten von Tabs:</p>
+<ul>
+  <li><b>Chat:</b> Du schreibst unten, die KI antwortet oben. Die Antworten werden gerendert wie in einem Browser-Chat: Markdown, LaTeX-Formeln in Buchqualität, Tabellen, Mermaid-Diagramme, Bilder und HTML-Blöcke als Live-Vorschau (Animationen, interaktive Grafiken).</li>
+  <li><b>Terminal:</b> ein vollwertiges Terminal (dieselbe Engine wie GNOME Terminal), beliebig viele Tabs.</li>
+</ul>
+<p>Die KI arbeitet in einem <b>Arbeitsordner</b>. Mit Claude Code als Backend kann sie die Dateien darin lesen, Code ausführen und Dateien schreiben, etwa Vorlesungsfolien lesen und dazu Fragen beantworten. In jedem Ordner liegen zwei Dateien, die RichTerm selbst anlegt: <code>richterm.md</code> (das Profil: Rolle, Verhalten, Modell) und <code>richterm-verlauf.md</code> (das Gedächtnis).</p>
+<p>Es ist nichts installiert worden: RichTerm besteht aus Python und den Bibliotheken, die Linux Mint ohnehin mitbringt. Das Projekt liegt unter <code>~/Desktop/RichTerm</code> und ist ein Git-Repository.</p>
+
+<h2>2. Starten</h2>
+<h3>Im aktuellen Ordner (der übliche Weg)</h3>
+<pre><code>cd ~/Uni/Maschinelles_Lernen     # Ordner mit Folien, Übungen, Notizen
+richterm                        # RichTerm öffnet sich mit diesem Ordner</code></pre>
+<p>Das Terminal ist sofort wieder frei und darf geschlossen werden. Mit Pfad geht es von überall: <code>richterm ~/Uni/ML</code>. Jeder Aufruf öffnet ein eigenes Fenster; du kannst also ein RichTerm für die Vorlesung und eins für ein Projekt gleichzeitig offen haben.</p>
+<h3>Weitere Wege</h3>
+<ul>
+  <li><b>Dateimanager (Nemo):</b> Rechtsklick auf einen Ordner oder in einen Ordner hinein, <b>„RichTerm hier öffnen“</b>.</li>
+  <li><b>Desktop-Icon / Anwendungsmenü:</b> startet im Home-Ordner; den Ordner wechselst du danach über den Ordnerknopf oben links.</li>
+</ul>
+<div class="box"><b>Beim ersten Start in einem Ordner</b> werden <code>richterm.md</code> und <code>richterm-verlauf.md</code> angelegt. Die Statuszeile unter dem Eingabefeld weist darauf hin. Fülle das Profil aus (Abschnitt 4), bevor du ernsthaft arbeitest.</div>
+
+<h2>3. Die Oberfläche</h2>
+<table>
+  <tr><th>Element</th><th>Funktion</th></tr>
+  <tr><td>Ordnerknopf (oben links)</td><td>Zeigt den Arbeitsordner; Klick öffnet die Ordnerwahl. Ein Wechsel startet eine neue Sitzung.</td></tr>
+  <tr><td>Modell</td><td>Standard / Opus / Sonnet / Haiku. Gesperrt, wenn das Profil ein Modell festlegt.</td></tr>
+  <tr><td>Berechtigungen</td><td>Fragen / Dateien bearbeiten erlauben / Alles erlauben (Abschnitt 7). Gesperrt, wenn das Profil es festlegt.</td></tr>
+  <tr><td>Profil</td><td>Öffnet <code>richterm.md</code> im Editor.</td></tr>
+  <tr><td>Neu laden</td><td>Liest das Profil neu ein (nach dem Bearbeiten). Gilt ab der nächsten Nachricht.</td></tr>
+  <tr><td>☀ / ☾</td><td>Hell / dunkel.</td></tr>
+  <tr><td>Neuer Chat</td><td>Beendet die laufende Sitzung und beginnt frisch (Abschnitt 6).</td></tr>
+  <tr><td>Eingabefeld</td><td><span class="kbd">Enter</span> sendet, <span class="kbd">Shift+Enter</span> macht einen Zeilenumbruch. <b>■</b> bricht eine laufende Antwort ab.</td></tr>
+  <tr><td>Statuszeile</td><td>Über dem Eingabefeld: Ordner, Sitzung, Dauer und Kosten der letzten Antwort, Hinweise.</td></tr>
+</table>
+<h3>In den Antworten</h3>
+<ul>
+  <li><b>Graue Zeilen</b> sind Werkzeugaufrufe (Datei gelesen, Befehl ausgeführt). Ein Klick zeigt Details und das Ergebnis.</li>
+  <li><b>Live-Vorschau</b> bei HTML-Blöcken: <i>Code</i> zeigt den Quelltext, <i>Neu laden</i> startet die Animation neu, <i>Im Browser</i> öffnet die Seite groß.</li>
+  <li><b>Berechtigungsfrage</b>: ein Kasten mit <i>Erlauben</i> / <i>Ablehnen</i>, wenn die KI ein Werkzeug benutzen will, das nicht freigegeben ist.</li>
+  <li><span class="kbd">Ctrl</span>+<span class="kbd">+</span> / <span class="kbd">−</span> ändert die Schriftgröße des Chats.</li>
+</ul>
+
+<h2 class="page">4. Das Profil: richterm.md</h2>
+<p>Das Profil ist die wichtigste Datei. Es wird bei jedem Start gelesen und der KI als <b>verbindliche Anweisung</b> mitgegeben, egal ob Claude oder eine lokale KI antwortet. Es gilt nur für diesen Ordner. So verhält sich die KI im Vorlesungsordner wie ein Tutor und im Projektordner wie ein Entwickler.</p>
+<h3>Oben: Einstellungen</h3>
+<table>
+  <tr><th>Feld</th><th>Werte</th><th>Bedeutung</th></tr>
+  <tr><td><code>backend</code></td><td><code>claude</code> · <code>command</code></td><td><code>claude</code> = Claude Code, voller Agent mit Dateizugriff. <code>command</code> = beliebige andere KI mit Kommandozeile, nur Chat.</td></tr>
+  <tr><td><code>model</code></td><td><code>opus</code> · <code>sonnet</code> · <code>haiku</code> · leer; bei <code>command</code> der Modellname, z. B. <code>qwen2.5:7b</code></td><td>Leer = Auswahl in der Kopfzeile gilt.</td></tr>
+  <tr><td><code>command</code></td><td>z. B. <code>ollama run {model}</code></td><td>Nur für <code>command</code>. <code>{model}</code> wird ersetzt.</td></tr>
+  <tr><td><code>permissions</code></td><td><code>default</code> · <code>acceptEdits</code> · <code>bypassPermissions</code></td><td><code>default</code> = Kopfzeile entscheidet; sonst festgelegt und gesperrt.</td></tr>
+  <tr><td><code>allowed_tools</code></td><td>z. B. <code>Read Grep Glob</code></td><td>Nur diese Werkzeuge: hier reines Lesen, nichts wird geändert.</td></tr>
+  <tr><td><code>disallowed_tools</code></td><td>z. B. <code>WebSearch "Bash(rm *)"</code></td><td>Diese Werkzeuge verbieten.</td></tr>
+  <tr><td><code>language</code></td><td>z. B. <code>Deutsch</code></td><td>Sprache der Antworten.</td></tr>
+  <tr><td><code>history</code></td><td><code>true</code> · <code>false</code></td><td>Gedächtnis (Verlaufsdatei) an oder aus.</td></tr>
+  <tr><td><code>context_chars</code></td><td>Zahl, Standard 20000</td><td>Wie viel Verlauf beim Start mitgegeben wird. Claude: 20000–60000; kleine lokale Modelle: 4000–8000.</td></tr>
+</table>
+<h3>Darunter: Anweisungen in normaler Sprache</h3>
+<p>Die Vorlage enthält sieben Abschnitte mit Beispielen. Schreib sie einfach um, lösche, was nicht passt:</p>
+<ul>
+  <li><b>Rolle</b>: Tutor, Entwickler, Reviewer, Prüfungsvorbereiter, Schreibassistent …</li>
+  <li><b>Themengebiet und Ziel</b>: „Vorlesung ML, Klausur im Februar, Schwerpunkt neuronale Netze.“</li>
+  <li><b>Was in diesem Ordner liegt</b>: „folien/ = PDFs, uebungen/ = Übungsblätter, notizen.md = meine Notizen.“</li>
+  <li><b>Verhalten</b>: schrittweise erklären, Rückfragen stellen, Quellen aus dem Ordner nennen.</li>
+  <li><b>Genauigkeit und Kreativität</b>: keine erfundenen Fakten; „steht in den Unterlagen“ vs. „Einschätzung“ trennen.</li>
+  <li><b>Antwortformat</b>: LaTeX-Formeln, nummerierte Herleitungen, Diagramme, Länge.</li>
+  <li><b>Nicht erlaubt</b>: nichts löschen, Folien nur lesen …</li>
+</ul>
+<div class="box"><b>Nach jeder Änderung:</b> im Chat auf <i>Neu laden</i> klicken. Die Änderung gilt ab der nächsten Nachricht (es wird eine neue Sitzung gestartet; der Verlauf bleibt erhalten).</div>
+
+<h2>5. Modelle wählen und laden</h2>
+<h3>Claude-Modelle</h3>
+<p>Mit <code>backend: claude</code> stehen <b>Opus</b> (stärkstes, teuerstes), <b>Sonnet</b> (ausgewogen) und <b>Haiku</b> (schnell, günstig) zur Wahl, entweder in der Kopfzeile oder fest im Profil (<code>model: sonnet</code>). Für Lernen mit Herleitungen empfiehlt sich Sonnet oder Opus, für schnelle Nachfragen Haiku. Die Kosten der letzten Antwort stehen in der Statuszeile. Ein Modellwechsel startet eine neue Sitzung; der Kontext kommt aus der Verlaufsdatei (Abschnitt 6).</p>
+<h3>Lokale Modelle (Ollama)</h3>
+<p>RichTerm bringt ein eigenes Ollama mit, ohne Installation, unter <code>~/.local/share/ollama</code>. Es läuft auf Port 11435 mit Modellen unter <code>~/.local/share/ollama/models</code> und wird bei Bedarf automatisch gestartet. Ein eventuell vorhandener älterer System-Ollama-Dienst (Port 11434) wird nicht benutzt.</p>
+<p><b>Ein neues Modell laden:</b> ein RichTerm-Terminal öffnen (<span class="kbd">Ctrl+Shift+T</span>, dort stimmen Pfad und Port automatisch) und eingeben:</p>
+<pre><code>ollama pull qwen2.5:7b        # lädt das Modell (ca. 4,7 GB), einmalig
+ollama list                   # zeigt die geladenen Modelle
+ollama rm qwen2.5:0.5b        # löscht ein Modell wieder</code></pre>
+<p>Modellnamen findest du auf <code>ollama.com/library</code>. Dann im Profil:</p>
+<pre><code>backend: command
+model: qwen2.5:7b
+command: ollama run {model}
+context_chars: 6000</code></pre>
+<p>Neu laden, fertig. Die Antworten werden genauso gerendert wie bei Claude.</p>
+<table>
+  <tr><th>Modell</th><th>Größe</th><th>Eignung auf deinem Laptop (CPU, 31 GB RAM)</th></tr>
+  <tr><td><code>qwen2.5:0.5b</code></td><td>0,4 GB</td><td>Nur zum Testen; antwortet in Sekunden, ignoriert Kontext oft.</td></tr>
+  <tr><td><code>qwen2.5:3b</code></td><td>1,9 GB</td><td>Schnell, einfaches Niveau.</td></tr>
+  <tr><td><code>qwen2.5:7b</code></td><td>4,7 GB</td><td>Beste Mischung aus Deutsch, Mathe und Code; 4–8 Wörter/s.</td></tr>
+  <tr><td><code>llama3.1:8b</code></td><td>4,9 GB</td><td>Solide Allzweck-Wahl.</td></tr>
+  <tr><td><code>qwen2.5:14b</code></td><td>9 GB</td><td>Besser, aber nur 1–3 Wörter/s.</td></tr>
+</table>
+<div class="box"><b>Grenzen lokaler Modelle:</b> keine Dateiwerkzeuge (sie können den Ordner nicht selbst lesen), deutlich schwächer als Claude bei längeren Herleitungen, aber kostenlos und vollständig privat. Nur das Claude-Backend liest Folien, führt Code aus und schreibt Dateien.</div>
+<h3>Andere KI mit Kommandozeile</h3>
+<p><code>backend: command</code> funktioniert mit jedem Programm, das den Text auf stdin liest und die Antwort auf stdout ausgibt. RichTerm übergibt Profil und bisherigen Gesprächsverlauf als Text, z. B. <code>command: llm -m {model}</code>.</p>
+
+<h2 class="page">6. Gedächtnis und Sitzungen</h2>
+<p>Es gibt zwei Ebenen, die zusammenarbeiten:</p>
+<h3>Claude-Code-Sitzung</h3>
+<p>Claude Code speichert jedes Gespräch selbst (unter <code>~/.claude/projects/…</code>), mit allem, was es gelesen und getan hat. RichTerm merkt sich pro Ordner die letzte Sitzung und <b>setzt sie beim nächsten Start automatisch fort</b> (Statuszeile: „Letzte Claude-Sitzung wird fortgesetzt“). <i>Neuer Chat</i> beendet das und beginnt frisch.</p>
+<h3>Die Verlaufsdatei richterm-verlauf.md</h3>
+<p>Das modellunabhängige Gedächtnis im Ordner. Jede Frage und Antwort wird angehängt, mit Zeit, Modell und LaTeX-Formeln. Beim Start einer neuen Sitzung, also nach einem Modell- oder Backend-Wechsel oder nach <i>Neuer Chat</i>, bekommt die KI die <b>Zusammenfassung</b> oben in der Datei und den <b>jüngsten Verlauf</b> mit. Nur darüber weiß Sonnet, was du mit Haiku besprochen hast, oder ein lokales Modell, was Claude erklärt hat. Beim Start zeigt der Chat die letzten Einträge grau an.</p>
+<p><b>Automatische Verdichtung:</b> Wird der Rohverlauf länger als das Budget (<code>context_chars</code>), fasst das Modell den älteren Teil zur Zusammenfassung zusammen. Das Original wandert nach <code>richterm-verlauf.archiv.md</code>; nichts geht verloren.</p>
+<p>Beide Dateien darfst du bearbeiten: die Zusammenfassung kürzen, Wichtiges ergänzen, Falsches streichen. <code>history: false</code> im Profil schaltet das Gedächtnis ab.</p>
+
+<h2>7. Berechtigungen</h2>
+<p>Mit Claude Code kann die KI Werkzeuge benutzen: Dateien lesen und schreiben, Befehle ausführen, im Web suchen. Was ohne Nachfrage erlaubt ist, steuert der Berechtigungsmodus:</p>
+<table>
+  <tr><th>Modus</th><th>Verhalten</th><th>Wann sinnvoll</th></tr>
+  <tr><td>Fragen (<code>default</code>)</td><td>Lesen geht sofort; Schreiben und Befehle werden im Chat erfragt (Erlauben / Ablehnen).</td><td>Lernen, Unterlagen lesen, alles, wo nichts verändert werden soll.</td></tr>
+  <tr><td>Dateien bearbeiten erlauben (<code>acceptEdits</code>)</td><td>Dateien ändern ohne Nachfrage; Befehle werden weiter erfragt.</td><td>Programmieren im Projektordner.</td></tr>
+  <tr><td>Alles erlauben (<code>bypassPermissions</code>)</td><td>Keine Nachfragen.</td><td>Nur in Ordnern, in denen nichts kaputtgehen kann.</td></tr>
+</table>
+<p>Feiner geht es mit <code>allowed_tools</code> / <code>disallowed_tools</code> im Profil, etwa <code>allowed_tools: Read Grep Glob</code> für einen Ordner, der nur gelesen werden darf.</p>
+
+<h2>8. Das Terminal und der Befehl rt</h2>
+<p><span class="kbd">Ctrl+Shift+T</span> öffnet ein Terminal im Arbeitsordner. Darin sind <code>rt</code>, <code>ollama</code> und <code>claude</code> direkt verfügbar. Mit <code>rt</code> schickst du Inhalte aus dem Terminal in den Chat:</p>
+<pre><code>rt ask 'Erkläre mir Backpropagation'    # Frage an den Chat
+rt latex '\frac{1}{1+e^{-z}}'           # Formel als Karte im Chat
+rt md notizen.md                        # Markdown-Datei (mit $…$-Formeln) anzeigen
+rt image plot.png                       # Bild anzeigen (auch GIF)
+rt html seite.html                      # HTML-Seite mit Animation einbetten
+rt mermaid 'graph LR; A-->B'            # Diagramm
+rt clear                                # Chat-Karten entfernen
+rt --help                               # alle Möglichkeiten</code></pre>
+<p><code>rt</code> funktioniert auch in jedem anderen Terminal, solange RichTerm läuft. Startest du <code>claude</code> in einem RichTerm-Terminal, weiß es durch <code>~/.claude/CLAUDE.md</code>, dass es Formeln und Bilder mit <code>rt</code> in den Chat-Tab schicken kann.</p>
+
+<h2>9. Tastenkürzel</h2>
+<table>
+  <tr><th>Taste</th><th>Wirkung</th></tr>
+  <tr><td><span class="kbd">Enter</span> / <span class="kbd">Shift+Enter</span></td><td>Senden / Zeilenumbruch (Chat)</td></tr>
+  <tr><td><span class="kbd">Ctrl</span>+<span class="kbd">+</span> / <span class="kbd">−</span></td><td>Chat-Schrift größer / kleiner</td></tr>
+  <tr><td><span class="kbd">Ctrl+Shift+T</span></td><td>Neues Terminal im Arbeitsordner</td></tr>
+  <tr><td><span class="kbd">Ctrl+Shift+W</span></td><td>Terminal schließen</td></tr>
+  <tr><td><span class="kbd">Ctrl+PgUp</span> / <span class="kbd">Ctrl+PgDn</span></td><td>Tab wechseln</td></tr>
+  <tr><td><span class="kbd">Ctrl+Shift+Enter</span></td><td>Zum Chat springen</td></tr>
+  <tr><td><span class="kbd">Ctrl+Shift+C</span> / <span class="kbd">Ctrl+Shift+V</span></td><td>Kopieren / Einfügen im Terminal (Rechtsklick fügt auch ein)</td></tr>
+  <tr><td><span class="kbd">Ctrl+Shift++</span> / <span class="kbd">Ctrl+Shift+−</span></td><td>Terminal-Schrift größer / kleiner</td></tr>
+  <tr><td><span class="kbd">Ctrl</span>+Klick auf Link</td><td>Link im Browser öffnen (Terminal)</td></tr>
+</table>
+
+<h2 class="page">10. Typische Arbeitsabläufe</h2>
+<h3>Lernen mit Vorlesungsfolien</h3>
+<ol>
+  <li>Ordner anlegen, z. B. <code>~/Uni/ML</code> mit Unterordnern <code>folien/</code>, <code>uebungen/</code>.</li>
+  <li><code>cd ~/Uni/ML</code> und <code>richterm</code>.</li>
+  <li><i>Profil</i> klicken: Rolle „Tutor“, Thema, Ordnerstruktur, „Quellen nennen“, Berechtigungen auf Fragen lassen. <i>Neu laden</i>.</li>
+  <li>Fragen: „Fass Folie 10–15 aus vorlesung_03.pdf zusammen und leite die Formel her.“ Claude liest das PDF und antwortet mit Formeln.</li>
+  <li>Am nächsten Tag wieder <code>richterm</code>: Die Sitzung wird fortgesetzt, der Verlauf steht im Chat.</li>
+</ol>
+<h3>Programmieren</h3>
+<ol>
+  <li><code>richterm ~/Projekte/mein-projekt</code>.</li>
+  <li>Profil: Rolle „Entwickler“, <code>permissions: acceptEdits</code>, ggf. Verbote (nichts löschen, keine Git-Pushes).</li>
+  <li>Aufgaben stellen; Werkzeugaufrufe erscheinen als graue Zeilen, Klick zeigt Details.</li>
+</ol>
+<h3>Kostenlos und privat mit lokalem Modell</h3>
+<ol>
+  <li>Einmalig im RichTerm-Terminal: <code>ollama pull qwen2.5:7b</code>.</li>
+  <li>Im Profil <code>backend: command</code>, <code>model: qwen2.5:7b</code>, <code>context_chars: 6000</code>. <i>Neu laden</i>.</li>
+  <li>Fragen stellen; Antworten dauern länger und sind einfacher, aber nichts verlässt den Rechner.</li>
+</ol>
+
+<h2>11. Probleme und Lösungen</h2>
+<table>
+  <tr><th>Problem</th><th>Lösung</th></tr>
+  <tr><td>Desktop-Icon tut nichts</td><td>Rechtsklick auf das Icon, „Starten erlauben“. Oder im Terminal <code>richterm</code>.</td></tr>
+  <tr><td>„Der Befehl claude wurde nicht gefunden“</td><td>Claude Code ist nicht installiert oder nicht im PATH. Im Terminal <code>claude --version</code> prüfen.</td></tr>
+  <tr><td>Lokales Modell antwortet nicht oder ewig</td><td>Im RichTerm-Terminal <code>ollama list</code> und <code>ollama ps</code> prüfen. Läuft ein alter System-Ollama auf 11434, stört er nicht; RichTerm benutzt Port 11435. Notfalls <code>pkill -f "ollama serve"</code> für den eigenen Dienst; er startet beim nächsten Mal neu.</td></tr>
+  <tr><td>Antwort wird abgeschnitten / Prozess beendet</td><td>Statuszeile lesen; <i>Neuer Chat</i> starten. Der Verlauf bleibt in <code>richterm-verlauf.md</code>.</td></tr>
+  <tr><td>Profiländerung wirkt nicht</td><td><i>Neu laden</i> klicken; gilt ab der nächsten Nachricht. Prüfen, ob das Feld oben (Einstellungen) oder unten (Text) gemeint ist.</td></tr>
+  <tr><td>Modell/Berechtigungen in der Kopfzeile gesperrt</td><td>Das Profil legt sie fest. Im Profil leer bzw. <code>default</code> eintragen, dann entscheidet die Kopfzeile.</td></tr>
+  <tr><td>Formeln werden nicht gerendert</td><td>Die KI muss LaTeX mit <code>$…$</code> schreiben; das steht im Profil. Bei lokalen Modellen hilft ein Hinweis in der Frage.</td></tr>
+  <tr><td>Kosten im Blick behalten</td><td>Die Statuszeile zeigt Dauer und Kosten jeder Antwort. Haiku ist am günstigsten.</td></tr>
+</table>
+
+<h2>12. Dateien im Überblick</h2>
+<table>
+  <tr><th>Ort</th><th>Inhalt</th></tr>
+  <tr><td><code>~/Desktop/RichTerm/</code></td><td>Das Programm (Git-Repository): <code>richterm.py</code>, <code>chat/</code>, <code>bin/rt</code>, <code>vendor/</code>, <code>profile_template.md</code>, <code>start.sh</code>, <code>README.md</code>, <code>docs/</code> (diese Anleitung).</td></tr>
+  <tr><td><code>&lt;Arbeitsordner&gt;/richterm.md</code></td><td>Profil für diesen Ordner.</td></tr>
+  <tr><td><code>&lt;Arbeitsordner&gt;/richterm-verlauf.md</code></td><td>Gedächtnis; <code>richterm-verlauf.archiv.md</code> = verdichtete Rohteile.</td></tr>
+  <tr><td><code>~/.config/richterm.json</code></td><td>Fenstergröße, Schrift, letzter Ordner, gemerkte Claude-Sitzungen pro Ordner.</td></tr>
+  <tr><td><code>~/.cache/richterm/html/</code></td><td>Abgelegte HTML-Vorschauen (kann gelöscht werden).</td></tr>
+  <tr><td><code>~/.local/share/ollama/</code></td><td>Eigenes Ollama (<code>dist/</code>) und Modelle (<code>models/</code>).</td></tr>
+  <tr><td><code>~/.local/bin/richterm</code>, <code>~/.local/bin/rt</code></td><td>Die Befehle (Verweise ins Projekt).</td></tr>
+  <tr><td><code>~/.claude/CLAUDE.md</code></td><td>Globale Hinweise für Claude Code (u. a. zu <code>rt</code>).</td></tr>
+</table>
+
+<footer>RichTerm · Anleitung erzeugt am 1. Oktober 2026 · Quelle: <code>docs/ANLEITUNG.html</code> im Projektordner; PDF daraus mit <code>docs/build.sh</code>.</footer>
+</body>
+</html>
