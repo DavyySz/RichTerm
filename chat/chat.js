@@ -400,6 +400,10 @@
         cwd = ev.cwd; $('cwd').textContent = ev.cwd.replace(ev.home, '~');
         window.RT_USER = ev.user;
         fillModels(ev.models || [], ev.current || 'claude:');
+        $('ragmode').value = ev.ragmode || 'on';
+        $('ragmode').title = ev.ragfiles != null && ev.ragmode !== 'off'
+          ? ('Ordner rag/: ' + ev.ragfiles + ' Datei(en). Lege Folien, Skripte, Notizen hinein.')
+          : 'Unterlagen aus dem Ordner rag/ im Arbeitsordner (gilt für diesen Ordner)';
         $('perm').value = ev.perm || 'default';
         $('perm').disabled = !!(ev.locked && ev.locked.perm) || ev.backend === 'command';
         $('perm').title = $('perm').disabled ? (ev.backend === 'command' ? 'Lokale Modelle haben keine Werkzeuge' : 'im Profil (richterm.md) festgelegt') : 'Berechtigungen';
@@ -583,6 +587,7 @@
   $('pull-name').addEventListener('keydown', e => { if (e.key === 'Enter') doPull(); if (e.key === 'Escape') $('btn-pull-cancel').click(); });
   $('btn-pull-cancel').onclick = () => { $('pull-box').hidden = true; send({ cmd: 'ready' }); };
   $('perm').onchange = () => send({ cmd: 'set', key: 'perm', value: $('perm').value });
+  $('ragmode').onchange = () => send({ cmd: 'set_ragmode', value: $('ragmode').value });
   $('btn-theme').onclick = () => { theme = theme === 'light' ? 'dark' : 'light'; applyPrefs(); };
   document.addEventListener('keydown', e => {
     if (e.ctrlKey && (e.key === '+' || e.key === '=')) { fontSize = Math.min(fontSize + 1, 40); applyPrefs(); e.preventDefault(); }

@@ -1361,9 +1361,10 @@ class Core:
     def ready_event(self, note, replay=False):
         if self.saved_session() and self.profile.get('backend', 'claude').lower() != 'command':
             note = 'Letzte Claude-Sitzung wird fortgesetzt · ' + note
+        ragfiles = None
         if self.rag and self.rag.exists():
-            n = len(self.rag.files())
-            note = ('Unterlagen: %d Dateien in rag/ · ' % n) + note
+            ragfiles = len(self.rag.files())
+            note = ('Unterlagen: %d Dateien in rag/ · ' % ragfiles) + note
         if self.profile_created:
             note = 'Profil angelegt: %s – bitte ausfüllen (Knopf „Profil“), dann „Neu laden“. ' % PROFILE_NAME + note
         return {'type': 'ready', 'cwd': self.cfg['cwd'], 'home': HOME, 'user': os.path.basename(HOME),
@@ -1373,6 +1374,7 @@ class Core:
                 'locked': {'model': False, 'perm': bool(self.profile_perm())},
                 'profile': PROFILE_NAME if os.path.exists(os.path.join(self.cfg['cwd'], PROFILE_NAME)) else '',
                 'replay': [{'role': r, 'time': t, 'text': x} for r, t, x in self.history.recent_turns()] if replay else [],
+                'ragmode': self.rag_mode(), 'ragfiles': ragfiles,
                 'note': note}
 
     def model_choices(self, local=True):
@@ -1465,6 +1467,25 @@ class Core:
         if rag and rag.exists():
             threading.Thread(target=self.rag_refresh, args=(rag,), daemon=True).start()
         return rag
+
+    def rag_mode(self):
+        if not self.rag:
+            return 'off'
+        return 'strict' if self.rag.strict else 'on'
+
+    def set_rag_mode(self, mode):
+        """Auswahl aus der Kopfzeile in richterm.md eintragen; rag/ bei Bedarf anlegen."""
+        if mode == 'off':
+            update_profile_settings(self.cfg['cwd'], rag='false')
+        else:
+            update_profile_settings(self.cfg['cwd'], rag='true', rag_strict='true' if mode == 'strict' else 'false')
+            os.makedirs(os.path.join(self.cfg['cwd'], RAG_DIRNAME), exist_ok=True)
+        self.profile, self.profile_body, self.profile_created = load_profile(self.cfg['cwd'])
+        self.profile_loaded_at = self.profile_mtime()
+        self.rag = self.make_rag()
+        labels = {'off': 'Unterlagen aus', 'on': 'Unterlagen ergänzend (KI darf eigenes Wissen dazunehmen, kennzeichnet es)',
+                  'strict': 'Nur Unterlagen (jede Aussage mit Quelle; sonst „steht nicht in den Unterlagen“)'}
+        self.chat_event(self.ready_event(labels.get(mode, mode) + ' · gilt ab der nächsten Frage'))
 
     def ensure_embed_model(self):
         """Einbettungsmodell für die semantische Suche einmalig laden (klein, offline), falls Ollama da ist."""
@@ -1560,6 +1581,8 @@ class Core:
             self.chat_event({'type': 'status', 'text': 'Neuer Chat (ohne Fortsetzung der alten Claude-Sitzung) · Ordner: ' + self.cfg['cwd']})
         elif cmd == 'refresh_models':
             self.refresh_models_async()
+        elif cmd == 'set_ragmode':
+            self.set_rag_mode(data.get('value', 'on'))
         elif cmd == 'choose_model':
             self.choose_model(data.get('value', 'claude:'))
         elif cmd == 'pull_model':

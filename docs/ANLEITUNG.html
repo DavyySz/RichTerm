@@ -170,12 +170,14 @@ richterm                        # RichTerm öffnet sich mit diesem Ordner</code>
 </ul>
 <h3>Wie die Suche arbeitet</h3>
 <p>Die Suche ist hybrid: Sie findet Stichwörter (BM25) <b>und</b> Bedeutung. Für Letzteres lädt RichTerm beim ersten Mal automatisch ein kleines Einbettungsmodell über Ollama (<code>embeddinggemma</code>, 620 MB, mehrsprachig, läuft offline). Damit findet „Wie groß ist die Schrittweite?“ auch eine Folie, auf der „Lernrate“ steht, und Fragen ohne Bezug zu den Unterlagen („Hauptstadt von Peru“) liefern keine Treffer, statt irgendetwas hineinzuzwingen. Ist kein Ollama da, bleibt die Stichwortsuche.</p>
+<h3>Wie streng: das Menü „Unterlagen“ in der Kopfzeile</h3>
 <table>
-  <tr><th>Profil-Einstellung</th><th>Wirkung</th></tr>
-  <tr><td><code>rag: false</code></td><td>Unterlagen-Suche aus.</td></tr>
-  <tr><td><code>rag_chunks: 6</code></td><td>Wie viele Abschnitte pro Frage mitgehen.</td></tr>
-  <tr><td><code>rag_strict: true</code></td><td><b>Strenger Modus:</b> Die KI antwortet nur aus den Unterlagen, jede Aussage mit Quelle; steht etwas nicht drin, sagt sie das, statt eigenes Wissen zu ergänzen. Gut für „Was hat der Prof gesagt?“.</td></tr>
+  <tr><th>Einstellung</th><th>Verhalten</th></tr>
+  <tr><td>Unterlagen: aus</td><td>Der Ordner <code>rag/</code> wird ignoriert.</td></tr>
+  <tr><td>Unterlagen: ergänzend <i>(Standard)</i></td><td>Passende Auszüge werden bei jeder Frage mitgegeben; die KI stützt sich darauf und zitiert, darf aber eigenes Wissen ergänzen und kennzeichnet es.</td></tr>
+  <tr><td>Unterlagen: nur daraus</td><td><b>Strenger Modus:</b> Die KI antwortet ausschließlich aus den Unterlagen, jede Aussage mit Quelle; steht etwas nicht drin, sagt sie das, statt eigenes Wissen zu ergänzen. Gut für „Was hat der Prof gesagt?“ und Klausurvorbereitung.</td></tr>
 </table>
+<p>Die Wahl gilt für diesen Ordner, bleibt gespeichert (RichTerm trägt sie in <code>richterm.md</code> ein) und greift ab der nächsten Frage. Sie ist also immer aktiv, nicht nur manchmal: Bei jeder Frage wird gesucht; nur wenn nichts passt, geht nichts mit (dann fehlt die 📚-Zeile). <code>rag_chunks</code> im Profil (Standard 6) bestimmt, wie viele Abschnitte pro Frage mitgehen.</p>
 <p><b>Ganze Datei mitgeben:</b> Schreib <code>@vorlesung_03.pdf</code> (oder einen Anfang des Namens, <code>@vorlesung_03</code>) in die Frage, dann bekommt die KI die komplette Datei statt nur Treffer. Das ist der Weg für „Fasse die Vorlesung zusammen“. Bei Claude passen sehr lange Dateien hinein, bei lokalen Modellen wird nach etwa 12 000 Zeichen gekürzt.</p>
 <div class="box"><b>Praktisch:</b> Die Zeile „📚 Unterlagen: …“ unter deiner Frage zeigt, was mitgeschickt wurde. Fehlt sie, wurde nichts Passendes gefunden, und die Antwort kommt nicht aus deinen Unterlagen. Für PDFs wird <code>pdftotext</code> gebraucht (Linux: Paket <code>poppler-utils</code>, meist vorhanden; macOS: <code>brew install poppler</code>).</div>
 

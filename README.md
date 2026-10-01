@@ -90,9 +90,9 @@ die Dateien bleiben, wo sie sind. Neue oder geänderte Dateien werden automatisc
 (Index: `rag/.richterm-index.json`). Für PDFs wird `pdftotext` gebraucht (Paket `poppler-utils`, macOS `brew install poppler`).
 Die Suche ist **hybrid**: Stichwörter (BM25) plus Bedeutung über ein kleines lokales Einbettungsmodell
 (`embeddinggemma`, 620 MB, wird beim ersten Mal automatisch über Ollama geladen); „Schrittweite“ findet so auch
-„Lernrate“, und Fragen ohne Bezug zu den Unterlagen liefern keine Treffer. Im Profil: `rag: false` schaltet es ab,
-`rag_chunks` bestimmt, wie viele Abschnitte pro Frage mitgehen (Standard 6), `rag_strict: true` erzwingt Antworten
-**nur** aus den Unterlagen („dazu steht nichts in den Unterlagen“ statt eigenem Wissen). `@vorlesung_03.pdf` in der
+„Lernrate“, und Fragen ohne Bezug zu den Unterlagen liefern keine Treffer. Wie streng, wählst du im Menü
+**Unterlagen** in der Kopfzeile: *aus* · *ergänzend* (Standard: Unterlagen als Hauptquelle, eigenes Wissen gekennzeichnet)
+· *nur daraus* (ausschließlich aus den Unterlagen, sonst „dazu steht nichts in den Unterlagen“). Gilt pro Ordner. `@vorlesung_03.pdf` in der
 Frage gibt die ganze Datei mit, z. B. für Zusammenfassungen.
 
 ## Gedächtnis: `richterm-verlauf.md`
