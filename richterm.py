@@ -991,6 +991,11 @@ class RichTerm(Gtk.Window):
             self.end_session()
             self.forget_session()
             self.chat_event({'type': 'status', 'text': 'Neuer Chat (ohne Fortsetzung der alten Claude-Sitzung) · Ordner: ' + self.cfg['cwd']})
+        elif cmd == 'refresh_models':
+            def work():
+                models = self.model_choices()
+                GLib.idle_add(self.chat_event, {'type': 'models', 'models': models, 'current': self.current_choice()})
+            threading.Thread(target=work, daemon=True).start()
         elif cmd == 'choose_model':
             self.choose_model(data.get('value', 'claude:'))
         elif cmd == 'pull_model':

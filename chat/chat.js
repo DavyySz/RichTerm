@@ -284,6 +284,7 @@
         setStatus(ev.note || '');
         break;
       case 'card': addCard(ev.msg); break;
+      case 'models': fillModels(ev.models || [], ev.current || 'claude:'); break;
       case 'user_sent': addUser(ev.text); setBusy(true); setStatus('Claude arbeitet …'); break;
       case 'status': setStatus(ev.text); break;
       case 'error': { const m = addMessage('assistant'); m.bubble.innerHTML = '<div class="error">' + escapeHtml(ev.text) + '</div>'; setBusy(false); break; }
@@ -375,6 +376,8 @@
   $('btn-folder').onclick = () => send({ cmd: 'choose_folder' });
   $('btn-profile').onclick = () => send({ cmd: 'profile_edit' });
   $('btn-reload').onclick = () => send({ cmd: 'profile_reload' });
+  // Beim Öffnen des Menüs die Liste der lokalen Modelle aktualisieren (neu geladene erscheinen sofort)
+  $('model').addEventListener('focus', () => send({ cmd: 'refresh_models' }));
   $('model').onchange = () => {
     if ($('model').value === '__pull__') { $('pull-box').hidden = false; $('pull-name').focus(); return; }
     send({ cmd: 'choose_model', value: $('model').value });
