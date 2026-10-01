@@ -765,6 +765,7 @@ class RichTerm(Gtk.Window):
             save_config(self.cfg)
         self.session = None
         self.profile, self.profile_body, self.profile_created = load_profile(self.cfg['cwd'])
+        self.profile_loaded_at = self.profile_mtime()
         self.history = self.make_history()
         self.recorder = TurnRecorder()
         self.set_default_size(*self.cfg['window'])
@@ -911,10 +912,20 @@ class RichTerm(Gtk.Window):
                 GLib.idle_add(self.chat_event, {'type': 'error', 'text': 'Modell %s konnte nicht geladen werden. Name prüfen (ollama.com/library).' % name})
         threading.Thread(target=run, daemon=True).start()
 
+    def profile_mtime(self):
+        try:
+            return os.path.getmtime(os.path.join(self.cfg['cwd'], PROFILE_NAME))
+        except OSError:
+            return 0
+
     def reload_profile(self):
         self.profile, self.profile_body, self.profile_created = load_profile(self.cfg['cwd'])
+        self.profile_loaded_at = self.profile_mtime()
         self.history = self.make_history()
         self.end_session()
+
+    def profile_changed_on_disk(self):
+        return self.profile_mtime() != getattr(self, 'profile_loaded_at', 0)
 
     def make_history(self):
         enabled = str(self.profile.get('history', 'true')).lower() not in ('false', 'no', 'nein', '0', 'off')
@@ -1037,6 +1048,10 @@ class RichTerm(Gtk.Window):
     def send_to_claude(self, text):
         if not text.strip():
             return
+        if self.profile_changed_on_disk():
+            # richterm.md wurde gespeichert: automatisch übernehmen, neue Sitzung mit neuem Profil
+            self.reload_profile()
+            self.chat_event(self.ready_event('Profil wurde geändert und automatisch übernommen'))
         if self.session is None:
             on_msg = lambda m: GLib.idle_add(self.on_claude_message, m)  # noqa: E731
             on_exit = lambda code: GLib.idle_add(self.on_session_exit, code)  # noqa: E731
