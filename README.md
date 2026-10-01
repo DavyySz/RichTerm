@@ -13,9 +13,25 @@ Dazu Tabs mit einem vollwertigen Terminal (VTE, dieselbe Engine wie GNOME Termin
 
 **Ausführliche Bedienungsanleitung:** [`docs/ANLEITUNG.pdf`](docs/ANLEITUNG.pdf) (Quelle `docs/ANLEITUNG.html`, neu bauen mit `docs/build.sh`).
 
-Keine Installation nötig: Python 3 plus die auf Linux Mint vorhandenen GTK-, VTE- und WebKit-Bindungen.
-Die JavaScript-Bibliotheken (KaTeX, marked, mermaid) liegen in `vendor/`, alles läuft offline.
-Claude Code (`claude`) muss installiert sein.
+## Installation (Linux)
+
+```bash
+git clone https://github.com/DavyySz/RichTerm.git
+cd RichTerm
+./install.sh
+```
+
+Das Skript prüft die Voraussetzungen, legt die Befehle `richterm` und `rt` in `~/.local/bin` an, einen
+Menü-/Desktop-Eintrag und (bei Nemo) einen Rechtsklick-Eintrag, und bietet an, ein lokales Ollama für
+Offline-Modelle nach `~/.local` zu laden. Keine Root-Rechte nötig. `./install.sh --uninstall` entfernt die Verknüpfungen.
+
+**Voraussetzungen:** Python 3 mit GObject-Bindungen, GTK 3, VTE 2.91, WebKitGTK 4.1 (auf Linux Mint und
+Ubuntu vorinstalliert; sonst z. B. `sudo apt install python3-gi gir1.2-gtk-3.0 gir1.2-vte-2.91 gir1.2-webkit2-4.1`)
+und [Claude Code](https://docs.anthropic.com/claude-code) (`claude`, einmal gestartet und angemeldet). Ohne Claude Code
+funktioniert nur der Chat mit lokalen Modellen. Die JavaScript-Bibliotheken (KaTeX, marked, mermaid, highlight.js)
+liegen in `vendor/`, alles läuft offline.
+
+**macOS und Windows werden nicht unterstützt** (VTE und WebKitGTK gibt es dort nicht als nutzbare Pakete).
 
 ## Starten
 
