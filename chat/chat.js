@@ -431,6 +431,7 @@
   };
 
   function handleClaude(m) {
+    if (m.type === 'system' && m.subtype === 'status' && m.text) { setStatus(m.text); return; }
     if (m.type === 'system' && m.subtype === 'init') {
       setStatus('Sitzung ' + (m.model || '') + ' · ' + (m.cwd || ''));
       return;

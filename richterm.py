@@ -395,8 +395,27 @@ class OllamaSession:
             self.on_message({'type': 'result', 'is_error': True,
                              'result': 'Ollama ist nicht verfügbar (erwartet unter %s).' % OLLAMA_LOCAL})
             return
+        # Alle physischen Kerne nutzen: Ollama erkennt bei Hybrid-CPUs (z.B. i5-1235U) sonst nur die
+        # Performance-Kerne und rechnet auf 2 statt 10 Kernen.
+        threads = os.cpu_count() or 4
+        try:
+            import re as _re
+            cores = set()
+            for d in os.listdir('/sys/devices/system/cpu'):
+                if _re.fullmatch(r'cpu\d+', d):
+                    try:
+                        with open('/sys/devices/system/cpu/%s/topology/core_cpus_list' % d) as fh:
+                            cores.add(fh.read().strip())
+                    except OSError:
+                        pass
+            if cores:
+                threads = len(cores)
+        except OSError:
+            pass
         body = json.dumps({'model': self.model, 'messages': self.messages, 'stream': True,
-                           'options': {'num_ctx': 8192}}).encode('utf-8')
+                           'options': {'num_ctx': 8192, 'num_thread': threads}}).encode('utf-8')
+        self.on_message({'type': 'system', 'subtype': 'status', 'status': 'ollama_thinking',
+                         'text': 'Lokales Modell %s liest die Anfrage (%d Kerne) …' % (self.model, threads)})
         req = urllib.request.Request('http://%s/api/chat' % self.host, data=body,
                                      headers={'Content-Type': 'application/json'})
         ev = lambda e: self.on_message({'type': 'stream_event', 'event': e})  # noqa: E731
