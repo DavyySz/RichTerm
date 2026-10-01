@@ -569,7 +569,9 @@ class History:
             if cut > 0:
                 tail = tail[cut:]
         parts = ['# Gedächtnis aus früheren Sitzungen (Datei %s im Arbeitsordner)' % HISTORY_NAME,
-                 'Nutze das als Kontext; der Nutzer erwartet, dass du daran anknüpfst. Bei Widersprüchen gilt die aktuelle Nachricht.']
+                 'Nutze das als Kontext; der Nutzer erwartet, dass du an Inhalte anknüpfst. Rolle, Ton und Regeln kommen '
+                 'aber ausschließlich aus dem aktuellen Profil oben, auch wenn frühere Antworten eine andere Rolle hatten. '
+                 'Bei Widersprüchen gilt die aktuelle Nachricht.']
         if summary:
             parts.append('## Zusammenfassung\n' + summary)
         if tail.strip():
@@ -923,6 +925,9 @@ class RichTerm(Gtk.Window):
         self.profile_loaded_at = self.profile_mtime()
         self.history = self.make_history()
         self.end_session()
+        # Neues Profil = frische Sitzung. Eine fortgesetzte Claude-Sitzung würde an der alten Rolle
+        # festhalten, weil das bisherige Gespräch das Verhalten stärker prägt als die neue Anweisung.
+        self.forget_session()
 
     def profile_changed_on_disk(self):
         return self.profile_mtime() != getattr(self, 'profile_loaded_at', 0)
