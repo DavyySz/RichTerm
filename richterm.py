@@ -14,6 +14,7 @@ Tastenkürzel:
   Ctrl+PgUp/PgDn  Tab wechseln      Ctrl+Shift+C / Ctrl+Shift+V  kopieren / einfügen (Terminal)
   Ctrl+Shift++ / Ctrl+Shift+-  Terminal-Schrift   Ctrl+Shift+Enter  zum Chat springen
 """
+import datetime
 import json
 import mimetypes
 import os
@@ -240,6 +241,41 @@ class ClaudeSession:
 # stdin und antwortet auf stdout. Die Ausgabe wird in dasselbe Ereignisformat
 # übersetzt, das die Oberfläche von Claude Code kennt.
 # ----------------------------------------------------------------------------
+OLLAMA_LOCAL = os.path.join(HOME, '.local', 'share', 'ollama', 'dist', 'bin', 'ollama')
+
+
+def find_ollama():
+    return shutil.which('ollama') or (OLLAMA_LOCAL if os.path.exists(OLLAMA_LOCAL) else None)
+
+
+def ensure_ollama_running(timeout=30):
+    """Startet `ollama serve` im Hintergrund, falls der Dienst nicht erreichbar ist."""
+    import urllib.request
+    url = 'http://127.0.0.1:11434/api/version'
+
+    def alive():
+        try:
+            urllib.request.urlopen(url, timeout=1)
+            return True
+        except Exception:  # noqa: BLE001
+            return False
+    if alive():
+        return True
+    exe = find_ollama()
+    if not exe:
+        return False
+    env = dict(os.environ)
+    env['PATH'] = os.path.dirname(exe) + os.pathsep + env.get('PATH', '')
+    subprocess.Popen([exe, 'serve'], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                     stdin=subprocess.DEVNULL, start_new_session=True)
+    import time
+    for _ in range(timeout * 2):
+        if alive():
+            return True
+        time.sleep(0.5)
+    return False
+
+
 class CommandSession:
     name = 'Kommandozeilen-KI'
 
@@ -267,8 +303,20 @@ class CommandSession:
 
     def _run(self):
         self.on_message({'type': 'system', 'subtype': 'init', 'model': self.command, 'cwd': self.cwd})
+        argv = shlex.split(self.command)
+        env = dict(os.environ)
+        if argv and os.path.basename(argv[0]) == 'ollama':
+            exe = find_ollama()
+            if exe:
+                argv[0] = exe
+                env['PATH'] = os.path.dirname(exe) + os.pathsep + env.get('PATH', '')
+            self.on_message({'type': 'system', 'subtype': 'status', 'status': 'ollama'})
+            if not ensure_ollama_running():
+                self.on_message({'type': 'result', 'is_error': True,
+                                 'result': 'Ollama ist nicht installiert oder startet nicht (erwartet `ollama` im PATH oder unter %s).' % OLLAMA_LOCAL})
+                return
         try:
-            self.proc = subprocess.Popen(shlex.split(self.command), cwd=self.cwd, stdin=subprocess.PIPE,
+            self.proc = subprocess.Popen(argv, cwd=self.cwd, env=env, stdin=subprocess.PIPE,
                                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
         except OSError as e:
             self.on_message({'type': 'result', 'is_error': True, 'result': 'Befehl konnte nicht gestartet werden: %s' % e})
@@ -317,6 +365,200 @@ class CommandSession:
     def close(self):
         self.closed = True
         self.interrupt()
+
+
+# ----------------------------------------------------------------------------
+# Verlauf: richterm-verlauf.md im Arbeitsordner.
+# Jede abgeschlossene Frage/Antwort wird angehängt. Oben steht eine Zusammenfassung,
+# die automatisch vom Modell gepflegt wird, sobald der Rohverlauf das Kontextbudget
+# überschreitet; die verdichteten Rohteile wandern in richterm-verlauf.archiv.md.
+# Beim Start einer Sitzung bekommt die KI Zusammenfassung + jüngsten Verlauf mit.
+# ----------------------------------------------------------------------------
+HISTORY_NAME = 'richterm-verlauf.md'
+ARCHIVE_NAME = 'richterm-verlauf.archiv.md'
+HISTORY_HEAD = """# RichTerm-Verlauf
+
+<!-- Diese Datei pflegt RichTerm automatisch. Sie dient der KI als Gedächtnis über Sitzungen
+und Modellwechsel hinweg. Du darfst sie bearbeiten: Die Zusammenfassung kannst du selbst
+kürzen oder ergänzen; der Verlauf darunter ist das Rohprotokoll (neueste Einträge unten).
+Format: "### <Zeit> · Nutzer" und "### <Zeit> · Assistent (<Backend>)", dazwischen der Text. -->
+
+## Zusammenfassung
+
+(noch leer)
+
+## Verlauf
+"""
+SUMMARY_PROMPT = """Du pflegst das Langzeitgedächtnis eines Lern- und Arbeitsassistenten. Unten stehen die bisherige
+Zusammenfassung und ein Stück Rohverlauf, das jetzt verdichtet werden soll. Schreibe eine NEUE, vollständige
+Zusammenfassung in Markdown, die beides zusammenführt. Behalte alles, was für die weitere Arbeit zählt:
+Thema und Ziel des Nutzers, getroffene Entscheidungen, Erkenntnisse und Ergebnisse, Definitionen und Formeln
+(in LaTeX), offene Fragen, Dateien und Orte, Vorlieben des Nutzers. Lass Höflichkeiten und Wiederholungen weg.
+Stichpunkte sind gut, Zwischenüberschriften höchstens als "###". Antworte NUR mit der Zusammenfassung, ohne Vor- oder Nachwort.
+
+## Bisherige Zusammenfassung
+{summary}
+
+## Zu verdichtender Rohverlauf
+{raw}
+"""
+
+
+class History:
+    def __init__(self, cwd, enabled=True, budget=20000):
+        self.cwd = cwd
+        self.enabled = enabled
+        self.budget = max(2000, int(budget or 20000))
+        self.path = os.path.join(cwd, HISTORY_NAME)
+        self.lock = threading.Lock()
+
+    # --- Datei lesen/schreiben --------------------------------------------
+    def _read(self):
+        try:
+            with open(self.path, encoding='utf-8') as fh:
+                return fh.read()
+        except OSError:
+            return ''
+
+    def _split(self, text):
+        """-> (zusammenfassung, rohverlauf)"""
+        if '## Verlauf' not in text:
+            return '', ''
+        head, raw = text.split('## Verlauf', 1)
+        summary = ''
+        if '## Zusammenfassung' in head:
+            summary = head.split('## Zusammenfassung', 1)[1].strip()
+            if summary == '(noch leer)':
+                summary = ''
+        return summary, raw.strip()
+
+    def _write(self, summary, raw):
+        text = HISTORY_HEAD.replace('(noch leer)', summary.strip() or '(noch leer)') + '\n' + raw.strip() + '\n'
+        tmp = self.path + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as fh:
+            fh.write(text)
+        os.replace(tmp, self.path)
+
+    # --- Anhängen -----------------------------------------------------------
+    def append_turn(self, user_text, assistant_text, tools, backend_label):
+        if not self.enabled or not user_text.strip():
+            return
+        stamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+        entry = '\n### %s · Nutzer\n%s\n\n### %s · Assistent (%s)\n%s\n' % (
+            stamp, user_text.strip(), stamp, backend_label, assistant_text.strip() or '(keine Textantwort)')
+        if tools:
+            entry += '> Werkzeuge: ' + '; '.join(tools[:12]) + ('; …' if len(tools) > 12 else '') + '\n'
+        with self.lock:
+            exists = bool(self._read().strip())
+            with open(self.path, 'a', encoding='utf-8') as fh:
+                if not exists:
+                    fh.write(HISTORY_HEAD)
+                fh.write(entry)
+
+    # --- Kontext für den Start einer Sitzung ---------------------------------
+    def context_block(self):
+        if not self.enabled:
+            return ''
+        summary, raw = self._split(self._read())
+        if not summary and not raw:
+            return ''
+        tail = raw[-self.budget:] if len(raw) > self.budget else raw
+        if len(raw) > self.budget:
+            cut = tail.find('\n### ')
+            if cut > 0:
+                tail = tail[cut:]
+        parts = ['# Gedächtnis aus früheren Sitzungen (Datei %s im Arbeitsordner)' % HISTORY_NAME,
+                 'Nutze das als Kontext; der Nutzer erwartet, dass du daran anknüpfst. Bei Widersprüchen gilt die aktuelle Nachricht.']
+        if summary:
+            parts.append('## Zusammenfassung\n' + summary)
+        if tail.strip():
+            parts.append('## Jüngster Verlauf\n' + tail.strip())
+        return '\n\n'.join(parts)
+
+    # --- Verdichten --------------------------------------------------------
+    def needs_compaction(self):
+        if not self.enabled:
+            return False
+        _, raw = self._split(self._read())
+        return len(raw) > int(self.budget * 1.6)
+
+    def compact(self, summarize):
+        """Verdichtet den älteren Teil des Rohverlaufs mit `summarize(prompt) -> text`."""
+        with self.lock:
+            summary, raw = self._split(self._read())
+        if len(raw) <= self.budget:
+            return False
+        keep_from = len(raw) - self.budget // 2           # jüngste Hälfte des Budgets bleibt roh
+        cut = raw.find('\n### ', keep_from)
+        if cut < 0:
+            return False
+        old, recent = raw[:cut], raw[cut:]
+        new_summary = summarize(SUMMARY_PROMPT.format(summary=summary or '(leer)', raw=old))
+        if not new_summary or len(new_summary.strip()) < 20:
+            return False
+        with self.lock:
+            with open(os.path.join(self.cwd, ARCHIVE_NAME), 'a', encoding='utf-8') as fh:
+                fh.write('\n<!-- archiviert %s -->\n' % datetime.datetime.now().strftime('%Y-%m-%d %H:%M'))
+                fh.write(old.strip() + '\n')
+            self._write(new_summary.strip(), recent)
+        return True
+
+
+class TurnRecorder:
+    """Sammelt pro Frage den Antworttext und die Werkzeugaufrufe aus dem Ereignisstrom."""
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.user = ''
+        self.parts = []
+        self.tools = []
+
+    def feed(self, m):
+        t = m.get('type')
+        if t == 'stream_event':
+            e = m.get('event', {})
+            if e.get('type') == 'content_block_delta' and e.get('delta', {}).get('type') == 'text_delta':
+                self.parts.append(e['delta'].get('text', ''))
+            elif e.get('type') == 'content_block_start' and e.get('content_block', {}).get('type') == 'text':
+                self.parts.append('\n\n' if self.parts else '')
+        elif t == 'assistant':
+            for c in (m.get('message') or {}).get('content') or []:
+                if c.get('type') == 'tool_use':
+                    i = c.get('input') or {}
+                    what = i.get('file_path') or i.get('command') or i.get('pattern') or i.get('description') or ''
+                    self.tools.append('%s %s' % (c.get('name'), str(what).split('\n')[0][:80]))
+
+    def text(self):
+        return ''.join(self.parts).strip()
+
+
+def summarize_with_claude(prompt):
+    exe = shutil.which('claude')
+    if not exe:
+        return ''
+    try:
+        r = subprocess.run([exe, '-p', '--model', 'haiku', '--output-format', 'text',
+                            '--permission-mode', 'dontAsk', '--disallowedTools', 'Bash', 'Edit', 'Write'],
+                           input=prompt, capture_output=True, text=True, timeout=180)
+        return r.stdout.strip() if r.returncode == 0 else ''
+    except (OSError, subprocess.SubprocessError):
+        return ''
+
+
+def summarize_with_command(command):
+    def run(prompt):
+        argv = shlex.split(command)
+        if argv and os.path.basename(argv[0]) == 'ollama' and find_ollama():
+            argv[0] = find_ollama()
+            ensure_ollama_running()
+        try:
+            r = subprocess.run(argv, input=prompt, capture_output=True, text=True, timeout=600)
+            return r.stdout.strip() if r.returncode == 0 else ''
+        except (OSError, subprocess.SubprocessError, ValueError):
+            return ''
+    return run
 
 
 # ----------------------------------------------------------------------------
@@ -412,6 +654,8 @@ class RichTerm(Gtk.Window):
             save_config(self.cfg)
         self.session = None
         self.profile, self.profile_body, self.profile_created = load_profile(self.cfg['cwd'])
+        self.history = self.make_history()
+        self.recorder = TurnRecorder()
         self.set_default_size(*self.cfg['window'])
         self.connect('destroy', self.on_quit)
         self.connect('key-press-event', self.on_key)
@@ -488,7 +732,43 @@ class RichTerm(Gtk.Window):
 
     def reload_profile(self):
         self.profile, self.profile_body, self.profile_created = load_profile(self.cfg['cwd'])
+        self.history = self.make_history()
         self.end_session()
+
+    def make_history(self):
+        enabled = str(self.profile.get('history', 'true')).lower() not in ('false', 'no', 'nein', '0', 'off')
+        try:
+            budget = int(self.profile.get('context_chars') or 20000)
+        except ValueError:
+            budget = 20000
+        return History(self.cfg['cwd'], enabled, budget)
+
+    def backend_label(self):
+        if self.profile.get('backend', 'claude').lower() == 'command':
+            return self.profile.get('command', 'command').replace('{model}', self.effective('model'))
+        return 'Claude Code' + (' · ' + self.effective('model') if self.effective('model') else '')
+
+    def summarizer(self):
+        if self.profile.get('backend', 'claude').lower() == 'command':
+            return summarize_with_command(self.profile.get('command', '').replace('{model}', self.effective('model')))
+        return summarize_with_claude
+
+    def on_claude_message(self, m):
+        """Jedes Ereignis der Sitzung: an die Oberfläche weiterreichen und für den Verlauf mitschreiben."""
+        self.recorder.feed(m)
+        if m.get('type') == 'result':
+            user, text, tools = self.recorder.user, self.recorder.text(), list(self.recorder.tools)
+            self.recorder.reset()
+            label = self.backend_label()
+            threading.Thread(target=self.history.append_turn, args=(user, text, tools, label), daemon=True).start()
+            if self.history.needs_compaction():
+                threading.Thread(target=self.compact_history, daemon=True).start()
+        return self.chat_event({'type': 'claude', 'msg': m})
+
+    def compact_history(self):
+        GLib.idle_add(self.chat_event, {'type': 'status', 'text': 'Verlauf wird verdichtet (Zusammenfassung in %s) …' % HISTORY_NAME})
+        ok = self.history.compact(self.summarizer())
+        GLib.idle_add(self.chat_event, {'type': 'status', 'text': 'Verlauf verdichtet.' if ok else 'Verlauf: Verdichten nicht möglich, Rohverlauf bleibt.'})
 
     def on_js_message(self, ucm, result):
         try:
@@ -547,9 +827,12 @@ class RichTerm(Gtk.Window):
         if not text.strip():
             return
         if self.session is None:
-            on_msg = lambda m: GLib.idle_add(self.chat_event, {'type': 'claude', 'msg': m})  # noqa: E731
+            on_msg = lambda m: GLib.idle_add(self.on_claude_message, m)  # noqa: E731
             on_exit = lambda code: GLib.idle_add(self.on_session_exit, code)  # noqa: E731
             prompt = build_system_prompt(self.profile, self.profile_body)
+            memory = self.history.context_block()
+            if memory:
+                prompt += '\n\n' + memory
             try:
                 if self.profile.get('backend', 'claude').lower() == 'command':
                     self.session = CommandSession(self.cfg['cwd'], self.profile.get('command', ''),
@@ -563,6 +846,8 @@ class RichTerm(Gtk.Window):
             except Exception as e:  # noqa: BLE001
                 self.chat_event({'type': 'error', 'text': str(e)})
                 return
+        self.recorder.reset()
+        self.recorder.user = text
         self.chat_event({'type': 'user_sent', 'text': text})
         self.session.send_user(text)
 

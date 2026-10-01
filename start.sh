@@ -4,7 +4,7 @@
 #   richterm ORDNER     → in ORDNER
 # Läuft losgelöst vom aufrufenden Terminal, das Terminal bleibt frei und darf geschlossen werden.
 DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
-export PATH="$DIR/bin:$PATH"
+export PATH="$DIR/bin:$HOME/.local/share/ollama/dist/bin:$PATH"
 TARGET="${1:-$PWD}"
 if [ ! -d "$TARGET" ]; then
   echo "richterm: Ordner nicht gefunden: $TARGET" >&2

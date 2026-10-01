@@ -33,6 +33,17 @@ disallowed_tools:
 
 # Sprache der Antworten
 language: Deutsch
+
+# Gedächtnis: Jede Frage/Antwort wird in richterm-verlauf.md in diesem Ordner
+# protokolliert. Beim Start einer Sitzung (auch nach einem Modellwechsel) bekommt
+# die KI die Zusammenfassung und den jüngsten Verlauf mit. Wird der Rohverlauf zu
+# lang, verdichtet das Modell den älteren Teil automatisch zur Zusammenfassung;
+# das Original wandert nach richterm-verlauf.archiv.md (nichts geht verloren).
+history: true
+
+# Wie viele Zeichen Verlauf maximal mitgegeben werden. Claude verträgt viel
+# (20000–60000); kleine lokale Modelle eher 4000–8000.
+context_chars: 20000
 ---
 
 # Rolle

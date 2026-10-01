@@ -44,6 +44,7 @@ Oben in der Datei stehen Einstellungen:
 | `permissions` | `default` (fragen) · `acceptEdits` · `bypassPermissions` |
 | `allowed_tools` / `disallowed_tools` | Werkzeuge einschränken, z. B. `Read Grep Glob` für reines Lesen |
 | `language` | Sprache der Antworten |
+| `history` / `context_chars` | Gedächtnis an/aus und wie viel Verlauf mitgegeben wird (siehe unten) |
 
 Darunter in normalem Text: **Rolle**, **Themengebiet und Ziel**, **Was im Ordner liegt**, **Verhalten**,
 **Genauigkeit und Kreativität**, **Antwortformat**, **Nicht erlaubt**. Die Vorlage enthält zu jedem Abschnitt
@@ -51,6 +52,33 @@ Beispiele; schreib sie einfach um. Werte aus dem Profil haben Vorrang vor der Ko
 
 So verhält sich die KI im Vorlesungsordner wie ein Tutor und im Projektordner wie ein Entwickler, ohne dass du
 es jedes Mal erklären musst.
+
+## Gedächtnis: `richterm-verlauf.md`
+
+Jede Frage und Antwort wird in **`richterm-verlauf.md`** im Ordner protokolliert, in Markdown mit
+LaTeX-Formeln, Zeitstempel und Modell. Beim Start jeder Sitzung, also auch nach einem Modell- oder
+Backend-Wechsel, bekommt die KI die **Zusammenfassung** oben in der Datei und den **jüngsten Verlauf**
+mit. So bleibt der Kontext erhalten, egal welche KI gerade antwortet.
+
+Wird der Rohverlauf länger als das Budget (`context_chars` im Profil, Standard 20000 Zeichen),
+verdichtet das Modell den älteren Teil automatisch zur Zusammenfassung. Das Original wandert nach
+`richterm-verlauf.archiv.md`, nichts geht verloren. Beide Dateien darfst du selbst bearbeiten,
+z. B. die Zusammenfassung kürzen oder Wichtiges ergänzen. `history: false` im Profil schaltet das ab.
+
+## Lokale KI mit Ollama
+
+Ollama liegt ohne Installation unter `~/.local/share/ollama/dist/bin` (RichTerm startet den Dienst
+bei Bedarf selbst). Im Profil:
+
+```yaml
+backend: command
+model: qwen2.5:0.5b          # kleinstes brauchbares Modell zum Testen; besser: qwen2.5:7b
+command: ollama run {model}
+context_chars: 6000          # kleine Modelle vertragen weniger Kontext
+```
+
+Neue Modelle laden: `ollama pull qwen2.5:7b` (im RichTerm-Terminal, dort ist `ollama` im PATH).
+Lokale Modelle haben keine Dateiwerkzeuge; den Ordner lesen kann nur das Claude-Backend.
 
 ## Chat
 
