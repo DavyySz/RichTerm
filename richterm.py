@@ -57,7 +57,12 @@ PALETTE = {
 SYSTEM_NOTE = """Du antwortest in RichTerm, einer Chat-Oberfläche, die deine Antworten als Markdown rendert.
 Nutze das aktiv, wie in einem Lehrbuch oder einem guten Browser-Chat:
 - Formeln in LaTeX: inline $…$, abgesetzt $$…$$. Immer echtes LaTeX, nie Unicode-Mathematik.
-- ```mermaid-Blöcke werden als Diagramm gezeichnet, ```svg-Blöcke inline angezeigt.
+- Diagramme, Flussdiagramme, Ablauf- und Klassendiagramme IMMER als ```mermaid-Block (wird gezeichnet); nie als
+  ASCII-Art, Graphviz/DOT oder PlantUML. Mermaid-Regeln: `flowchart LR`/`TD`, `sequenceDiagram`, `classDiagram`,
+  `stateDiagram-v2`, `pie`, `gantt`; Knoten-IDs nur Buchstaben/Ziffern; Beschriftungen mit Sonderzeichen oder
+  Klammern in doppelte Anführungszeichen, z.B. A["Input (25)"] --> B["Hidden 64"]; keine Markdown-Formatierung
+  und kein LaTeX in Beschriftungen; Zeilenumbruch mit <br/>.
+- ```svg-Blöcke werden inline angezeigt (für Skizzen und geometrische Zeichnungen).
 - ```html-Blöcke werden als Live-Vorschau mit laufendem JavaScript angezeigt. Nutze sie für Animationen,
   interaktive Visualisierungen, Canvas-Grafiken und Simulationen (vollständige HTML-Dokumente mit eigenem
   Script, keine externen Ressourcen; Höhe per Kommentar <!-- height: 500 --> steuerbar).

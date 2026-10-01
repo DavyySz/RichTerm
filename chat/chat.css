@@ -156,3 +156,9 @@ body.dragging #composer { outline: 2px dashed var(--accent); outline-offset: -6p
 .actions button:hover { border-color: var(--accent); color: var(--ink); }
 .actions .save-note { border-color: var(--accent); color: var(--ink); }
 .msg.replay .actions button[data-prompt] { display: none; }
+
+/* Diagramm-Fehler */
+.diagram-fail { border: 1px dashed #e5736f; border-radius: 6px; margin: 0.6em 0; overflow: hidden; }
+.diagram-fail-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 6px 10px; font-family: "DejaVu Sans", sans-serif; font-size: 12px; color: #e5736f; }
+.diagram-fail .fix-btn { font-size: 12px; padding: 2px 10px; border-radius: 10px; border: 1px solid var(--accent); background: var(--surface); color: var(--ink); cursor: pointer; }
+.diagram-fail pre { margin: 0; border-radius: 0; }

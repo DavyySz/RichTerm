@@ -29,7 +29,7 @@
     $('btn-theme').textContent = theme === 'light' ? '☾' : '☀';
     $('hljs-dark').disabled = theme === 'light';
     $('hljs-light').disabled = theme !== 'light';
-    mermaid.initialize({ startOnLoad: false, theme: theme === 'light' ? 'default' : 'dark' });
+    mermaid.initialize({ startOnLoad: false, theme: theme === 'light' ? 'default' : 'dark', suppressErrorRendering: true });
     localStorage.setItem('rt-theme', theme); localStorage.setItem('rt-font', fontSize);
   }
   function nearBottom() { return messages.scrollHeight - messages.scrollTop - messages.clientHeight < 120; }
@@ -148,13 +148,48 @@
     });
   }
 
+  // Häufige Fehler in Mermaid-Quelltext von KI-Modellen automatisch beheben
+  function repairMermaid(src) {
+    let s = src.replace(/^\s*```(mermaid)?\s*|\s*```\s*$/g, '').trim();
+    // Beschriftungen mit Sonderzeichen in Anführungszeichen setzen:  A[Input (25)]  ->  A["Input (25)"]
+    const quote = (open, close) => {
+      const re = new RegExp('([A-Za-z0-9_]+)\\' + open + '([^' + '\\' + open + '\\' + close + '"\\n]*?[()\\[\\]{}:;,#%&<>=+*/\\\\][^' + '\\' + open + '\\' + close + '"\\n]*?)\\' + close, 'g');
+      s = s.replace(re, (m, id, label) => id + open + '"' + label.replace(/"/g, "'") + '"' + close);
+    };
+    quote('[', ']'); quote('{', '}');
+    // Kantenbeschriftungen mit Sonderzeichen:  -->|a (b)|  ->  -->|"a (b)"|
+    s = s.replace(/\|([^|"\n]*[()\[\]{}:;#%&<>][^|"\n]*)\|/g, (m, l) => '|"' + l + '"|');
+    // Mehrzeilige Labels: <br/> vereinheitlichen
+    s = s.replace(/<br\s*\/?>/gi, '<br/>');
+    return s;
+  }
+
   async function renderMermaidIn(el) {
     for (const b of el.querySelectorAll('.mermaid-src')) {
       const src = b.textContent;
       const holder = document.createElement('div'); holder.className = 'mermaid';
       b.replaceWith(holder);
-      try { holder.innerHTML = (await mermaid.render('mm-' + (++counter), src)).svg; }
-      catch (e) { holder.innerHTML = '<pre class="error">Mermaid: ' + escapeHtml(String(e)) + '\n' + escapeHtml(src) + '</pre>'; }
+      let lastErr = null;
+      for (const candidate of [src, repairMermaid(src)]) {
+        const id = 'mm-' + (++counter);
+        try {
+          holder.innerHTML = (await mermaid.render(id, candidate)).svg;
+          lastErr = null; break;
+        } catch (e) {
+          lastErr = e;
+          // Mermaid hängt bei Fehlern ein "Bomben"-SVG an den Seitenkörper: entfernen
+          document.querySelectorAll('body > #' + id + ', body > #d' + id + ', body > svg[id^="mm-"], body > div[id^="dmm-"]').forEach(n => n.remove());
+        }
+      }
+      if (lastErr) {
+        const msg = String(lastErr && lastErr.message || lastErr).split('\n')[0].slice(0, 200);
+        holder.innerHTML = '<div class="diagram-fail"><div class="diagram-fail-head">Diagramm konnte nicht gezeichnet werden: ' + escapeHtml(msg) +
+          ' <button class="fix-btn">Reparieren lassen</button></div><pre><code class="language-mermaid">' + escapeHtml(src) + '</code></pre></div>';
+        holder.querySelector('.fix-btn').onclick = () => {
+          if (busy) return;
+          send({ cmd: 'send', text: 'Dein Mermaid-Diagramm ließ sich nicht zeichnen (Fehler: ' + msg + '). Gib es bitte als korrigierten ```mermaid-Block erneut aus. Regeln: Beschriftungen mit Sonderzeichen in doppelte Anführungszeichen setzen, nur flowchart/graph/sequenceDiagram/classDiagram/stateDiagram, keine Markdown-Formatierung in Beschriftungen.\n\n```mermaid\n' + src + '\n```' });
+        };
+      }
     }
   }
 
