@@ -25,6 +25,8 @@
     if (theme === 'light') document.documentElement.setAttribute('data-theme', 'light');
     else document.documentElement.removeAttribute('data-theme');
     $('btn-theme').textContent = theme === 'light' ? '☾' : '☀';
+    $('hljs-dark').disabled = theme === 'light';
+    $('hljs-light').disabled = theme !== 'light';
     mermaid.initialize({ startOnLoad: false, theme: theme === 'light' ? 'default' : 'dark' });
     localStorage.setItem('rt-theme', theme); localStorage.setItem('rt-font', fontSize);
   }
@@ -88,7 +90,8 @@
           '<iframe sandbox="allow-scripts allow-same-origin"></iframe>' +
           '<pre hidden><code>' + escapeHtml(code) + '</code></pre></div>';
       }
-      return '<pre><code class="language-' + escapeHtml(lang) + '">' + escapeHtml(code) + '</code></pre>';
+      const label = lang ? '<span class="code-lang">' + escapeHtml(lang) + '</span>' : '';
+      return '<pre>' + label + '<code class="language-' + escapeHtml(lang) + '">' + escapeHtml(code) + '</code></pre>';
     };
     let html = marked.parse(protectedSrc, { gfm: true, breaks: false, renderer });
     html = html.replace(/\u0000M(\d+)\u0000/g, (_, i) => escapeHtml(stash[+i]));
@@ -101,7 +104,29 @@
       throwOnError: false, macros: { '\\R': '\\mathbb{R}', '\\N': '\\mathbb{N}' },
     });
     target.querySelectorAll('.preview').forEach(setupPreview);
+    if (final) highlightCode(target);      // beim Streamen noch nicht (wird bei jedem Textstück neu gerendert)
     renderMermaidIn(target);
+  }
+
+  // Syntax-Hervorhebung (highlight.js, ~190 Sprachen; unbekannte Sprache -> automatische Erkennung)
+  const LANG_ALIAS = { js: 'javascript', ts: 'typescript', py: 'python', sh: 'bash', shell: 'bash', zsh: 'bash',
+    yml: 'yaml', md: 'markdown', 'c++': 'cpp', 'c#': 'csharp', cs: 'csharp', rs: 'rust', kt: 'kotlin', jsx: 'javascript',
+    tsx: 'typescript', dockerfile: 'dockerfile', plaintext: 'plaintext', text: 'plaintext', txt: 'plaintext', console: 'bash' };
+  function highlightCode(root) {
+    if (!window.hljs) return;
+    root.querySelectorAll('pre code').forEach(el => {
+      if (el.dataset.highlighted) return;
+      let lang = (el.className.match(/language-([\w+#.-]+)/) || [])[1] || '';
+      lang = LANG_ALIAS[lang.toLowerCase()] || lang.toLowerCase();
+      try {
+        if (lang && hljs.getLanguage(lang)) {
+          el.innerHTML = hljs.highlight(el.textContent, { language: lang, ignoreIllegals: true }).value;
+        } else if (!lang && el.textContent.length < 20000) {
+          el.innerHTML = hljs.highlightAuto(el.textContent).value;
+        }
+      } catch (e) { /* unverändert lassen */ }
+      el.dataset.highlighted = '1';
+    });
   }
 
   async function renderMermaidIn(el) {

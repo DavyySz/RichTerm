@@ -72,8 +72,10 @@ button, select, textarea { font-family: "DejaVu Sans", system-ui, sans-serif; }
 .bubble a { color: var(--accent); }
 .bubble hr { border: 0; border-top: 1px solid var(--rule); }
 code { font-family: "DejaVu Sans Mono", monospace; font-size: 0.86em; background: var(--surface-2); padding: 1px 5px; border-radius: 3px; }
-pre { background: var(--surface-2); border-radius: 6px; padding: 10px 12px; overflow-x: auto; font-size: 0.86em; line-height: 1.45; }
-pre code { background: none; padding: 0; font-size: 1em; }
+pre { position: relative; background: var(--surface-2); border-radius: 6px; padding: 10px 12px; overflow-x: auto; font-size: 0.86em; line-height: 1.45; }
+pre code { background: none; padding: 0; font-size: 1em; display: block; }
+pre code.hljs { background: none; padding: 0; }
+.code-lang { position: absolute; top: 4px; right: 8px; font-family: "DejaVu Sans", sans-serif; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft); user-select: none; }
 .katex-display { margin: 0.6em 0; overflow-x: auto; overflow-y: hidden; }
 .katex { font-size: 1.15em; }
 .mermaid { text-align: center; margin: 0.6em 0; }
