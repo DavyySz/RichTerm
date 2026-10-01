@@ -29,7 +29,22 @@
     $('btn-theme').textContent = theme === 'light' ? '☾' : '☀';
     $('hljs-dark').disabled = theme === 'light';
     $('hljs-light').disabled = theme !== 'light';
-    mermaid.initialize({ startOnLoad: false, theme: theme === 'light' ? 'default' : 'dark', suppressErrorRendering: true });
+    const mv = theme === 'light'
+      ? { background: '#f1f1ee', primaryColor: '#d6e4e6', primaryTextColor: '#1d2126', primaryBorderColor: '#19606a',
+          secondaryColor: '#e3e8ea', secondaryTextColor: '#1d2126', secondaryBorderColor: '#7f837f',
+          tertiaryColor: '#ececea', tertiaryTextColor: '#1d2126', tertiaryBorderColor: '#7f837f',
+          lineColor: '#30363d', textColor: '#1d2126', edgeLabelBackground: '#f1f1ee',
+          noteBkgColor: '#f3e9c6', noteTextColor: '#1d2126', actorBkg: '#d6e4e6', actorBorder: '#19606a', actorTextColor: '#1d2126',
+          signalColor: '#30363d', signalTextColor: '#1d2126', labelBoxBkgColor: '#e3e8ea', labelTextColor: '#1d2126', loopTextColor: '#1d2126',
+          clusterBkg: '#e3e8ea', clusterBorder: '#7f837f', titleColor: '#1d2126', fontFamily: 'DejaVu Sans, sans-serif', fontSize: '15px' }
+      : { background: '#33373d', primaryColor: '#3f4d5a', primaryTextColor: '#e8e6e1', primaryBorderColor: '#7cc9d1',
+          secondaryColor: '#4a5563', secondaryTextColor: '#e8e6e1', secondaryBorderColor: '#8b94a0',
+          tertiaryColor: '#3c4148', tertiaryTextColor: '#e8e6e1', tertiaryBorderColor: '#8b94a0',
+          lineColor: '#c9d1d9', textColor: '#e8e6e1', edgeLabelBackground: '#2b2e33',
+          noteBkgColor: '#5a5033', noteTextColor: '#f2f0eb', actorBkg: '#3f4d5a', actorBorder: '#7cc9d1', actorTextColor: '#e8e6e1',
+          signalColor: '#c9d1d9', signalTextColor: '#e8e6e1', labelBoxBkgColor: '#4a5563', labelTextColor: '#e8e6e1', loopTextColor: '#e8e6e1',
+          clusterBkg: '#3c4148', clusterBorder: '#8b94a0', titleColor: '#e8e6e1', fontFamily: 'DejaVu Sans, sans-serif', fontSize: '15px' };
+    mermaid.initialize({ startOnLoad: false, theme: 'base', themeVariables: mv, suppressErrorRendering: true });
     localStorage.setItem('rt-theme', theme); localStorage.setItem('rt-font', fontSize);
   }
   function nearBottom() { return messages.scrollHeight - messages.scrollTop - messages.clientHeight < 120; }
@@ -250,9 +265,16 @@
     if (renderTimer) return;
     renderTimer = setTimeout(() => {
       renderTimer = null;
-      if (block.el) renderMarkdown(block.text, block.el, false);
+      if (block.el && !block.done) renderMarkdown(block.text, block.el, false);
       scrollDown();
     }, 60);
+  }
+  function cancelRender() { if (renderTimer) { clearTimeout(renderTimer); renderTimer = null; } }
+  function finalizeBlock(b) {
+    // endgültige Darstellung (mit Diagrammen, Vorschauen, Hervorhebung); keine verzögerte Zwischen-Darstellung mehr danach
+    cancelRender();
+    b.done = true;
+    if (b.el) renderMarkdown(b.text, b.el, true);
   }
 
   function blockFor(index, kind) {
@@ -291,8 +313,9 @@
     for (const k of Object.keys(current.blocks).sort((a, b) => a - b)) {
       const b = current.blocks[k];
       if (b.kind === 'thinking' && b.el) b.el.remove();
-      if (b.kind === 'text' && b.el) { renderMarkdown(b.text, b.el); texts.push(b.text); }
+      if (b.kind === 'text' && b.el) { if (!b.done) finalizeBlock(b); texts.push(b.text); }
     }
+    cancelRender();
     const md = texts.join('\n\n').trim();
     if (md) addActions(current.el, md, lastQuestion);
     current = null;
@@ -406,7 +429,7 @@
       } else if (e.type === 'content_block_stop') {
         const b = current && current.blocks[e.index];
         if (b && b.kind === 'thinking' && b.el) b.el.remove();
-        if (b && b.kind === 'text' && b.el) renderMarkdown(b.text, b.el);
+        if (b && b.kind === 'text' && b.el) finalizeBlock(b);
       }
       return;
     }
