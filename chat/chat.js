@@ -242,8 +242,15 @@
       case 'ready':
         cwd = ev.cwd; $('cwd').textContent = ev.cwd.replace(ev.home, '~');
         window.RT_USER = ev.user;
-        if (ev.model) $('model').value = ev.model;
-        if (ev.perm) $('perm').value = ev.perm;
+        $('model').value = ev.model || '';
+        $('perm').value = ev.perm || 'default';
+        // vom Profil festgelegte Werte sind in der Kopfzeile gesperrt
+        $('model').disabled = !!(ev.locked && ev.locked.model);
+        $('perm').disabled = !!(ev.locked && ev.locked.perm) || ev.backend === 'command';
+        $('model').title = $('model').disabled ? 'im Profil (richterm.md) festgelegt' : 'Modell';
+        $('perm').title = $('perm').disabled ? 'im Profil (richterm.md) festgelegt' : 'Berechtigungen';
+        $('btn-profile').textContent = ev.profile ? 'Profil' : 'Profil anlegen';
+        $('btn-profile').title = 'richterm.md in ' + ev.cwd.replace(ev.home, '~') + (ev.backend === 'command' ? ' · Backend: Kommandozeile' : ' · Backend: Claude Code');
         setStatus(ev.note || '');
         break;
       case 'card': addCard(ev.msg); break;
@@ -336,6 +343,8 @@
   $('btn-stop').onclick = () => send({ cmd: 'interrupt' });
   $('btn-new').onclick = () => { send({ cmd: 'new' }); messages.querySelectorAll('.msg').forEach(m => m.remove()); $('welcome').hidden = false; current = null; setBusy(false); };
   $('btn-folder').onclick = () => send({ cmd: 'choose_folder' });
+  $('btn-profile').onclick = () => send({ cmd: 'profile_edit' });
+  $('btn-reload').onclick = () => send({ cmd: 'profile_reload' });
   $('model').onchange = () => send({ cmd: 'set', key: 'model', value: $('model').value });
   $('perm').onchange = () => send({ cmd: 'set', key: 'perm', value: $('perm').value });
   $('btn-theme').onclick = () => { theme = theme === 'light' ? 'dark' : 'light'; applyPrefs(); };

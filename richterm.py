@@ -17,6 +17,7 @@ Tastenkürzel:
 import json
 import mimetypes
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -92,10 +93,66 @@ def rgba(hexstr):
 
 
 # ----------------------------------------------------------------------------
+# Profil: richterm.md im Arbeitsordner (Einstellungen + Anweisungen an die KI)
+# ----------------------------------------------------------------------------
+PROFILE_NAME = 'richterm.md'
+TEMPLATE = os.path.join(HERE, 'profile_template.md')
+
+
+def load_profile(cwd):
+    """Liest richterm.md aus cwd; legt sie aus der Vorlage an, falls sie fehlt.
+    Gibt (settings, body, neu_angelegt) zurück."""
+    path = os.path.join(cwd, PROFILE_NAME)
+    created = False
+    if not os.path.exists(path):
+        try:
+            shutil.copyfile(TEMPLATE, path)
+            created = True
+        except OSError:
+            return {}, '', False
+    try:
+        with open(path, encoding='utf-8') as fh:
+            text = fh.read()
+    except OSError:
+        return {}, '', created
+    settings, body = {}, text
+    if text.startswith('---'):
+        end = text.find('\n---', 3)
+        if end != -1:
+            head, body = text[3:end], text[end + 4:]
+            for line in head.splitlines():
+                line = line.strip()
+                if not line or line.startswith('#') or ':' not in line:
+                    continue
+                key, _, value = line.partition(':')
+                settings[key.strip().lower()] = value.strip().strip('"\'')
+    return settings, body.strip(), created
+
+
+def build_system_prompt(settings, body):
+    parts = [SYSTEM_NOTE]
+    lang = settings.get('language')
+    if lang:
+        parts.append('Antworte auf ' + lang + '.')
+    if body:
+        parts.append('# Profil des Nutzers für diesen Ordner (verbindlich)\n\n' + body)
+    return '\n\n'.join(parts)
+
+
+def split_tools(value):
+    if not value:
+        return []
+    return [t.strip() for t in value.split(',')] if ',' in value else shlex.split(value)
+
+
+# ----------------------------------------------------------------------------
 # Claude-Code-Sitzung: ein `claude -p`-Prozess im Streaming-Modus
 # ----------------------------------------------------------------------------
 class ClaudeSession:
-    def __init__(self, cwd, model, perm, port, on_message, on_exit):
+    name = 'Claude Code'
+
+    def __init__(self, cwd, model, perm, port, on_message, on_exit, system_prompt=SYSTEM_NOTE,
+                 allowed_tools=(), disallowed_tools=()):
         self.on_message = on_message
         self.on_exit = on_exit
         self.proc = None
@@ -106,11 +163,15 @@ class ClaudeSession:
             raise RuntimeError('Der Befehl `claude` wurde nicht gefunden. Ist Claude Code installiert?')
         cmd = [exe, '-p', '--input-format', 'stream-json', '--output-format', 'stream-json',
                '--verbose', '--include-partial-messages', '--permission-prompt-tool', 'stdio',
-               '--append-system-prompt', SYSTEM_NOTE]
+               '--append-system-prompt', system_prompt]
         if model:
             cmd += ['--model', model]
         if perm and perm != 'default':
             cmd += ['--permission-mode', perm]
+        if allowed_tools:
+            cmd += ['--allowedTools'] + list(allowed_tools)
+        if disallowed_tools:
+            cmd += ['--disallowedTools'] + list(disallowed_tools)
         env = dict(os.environ)
         env['RICHTERM'] = '1'
         env['RT_PORT'] = str(port)
@@ -171,6 +232,91 @@ class ClaudeSession:
                     fn()
                 except OSError:
                     pass
+
+
+# ----------------------------------------------------------------------------
+# Beliebige andere KI mit Kommandozeile (z.B. `ollama run modell`): reiner Chat.
+# Pro Nachricht wird der Befehl gestartet, bekommt Profil + bisherigen Verlauf auf
+# stdin und antwortet auf stdout. Die Ausgabe wird in dasselbe Ereignisformat
+# übersetzt, das die Oberfläche von Claude Code kennt.
+# ----------------------------------------------------------------------------
+class CommandSession:
+    name = 'Kommandozeilen-KI'
+
+    def __init__(self, cwd, command, model, system_prompt, on_message, on_exit):
+        self.cwd = cwd
+        self.command = command.replace('{model}', model or '')
+        self.system_prompt = system_prompt
+        self.on_message = on_message
+        self.on_exit = on_exit
+        self.history = []
+        self.proc = None
+        self.stderr_tail = ''
+        self.closed = False
+
+    def send_user(self, text):
+        self.history.append(('Nutzer', text))
+        threading.Thread(target=self._run, daemon=True).start()
+
+    def _transcript(self):
+        lines = ['SYSTEM:\n' + self.system_prompt, '']
+        for role, msg in self.history:
+            lines.append(role + ':\n' + msg + '\n')
+        lines.append('Assistent:')
+        return '\n'.join(lines)
+
+    def _run(self):
+        self.on_message({'type': 'system', 'subtype': 'init', 'model': self.command, 'cwd': self.cwd})
+        try:
+            self.proc = subprocess.Popen(shlex.split(self.command), cwd=self.cwd, stdin=subprocess.PIPE,
+                                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
+        except OSError as e:
+            self.on_message({'type': 'result', 'is_error': True, 'result': 'Befehl konnte nicht gestartet werden: %s' % e})
+            return
+        threading.Thread(target=self._drain_stderr, args=(self.proc,), daemon=True).start()
+        try:
+            self.proc.stdin.write(self._transcript())
+            self.proc.stdin.close()
+        except OSError:
+            pass
+        ev = lambda e: self.on_message({'type': 'stream_event', 'event': e})
+        ev({'type': 'message_start'})
+        ev({'type': 'content_block_start', 'index': 0, 'content_block': {'type': 'text', 'text': ''}})
+        answer = []
+        while True:
+            chunk = self.proc.stdout.read(64)
+            if not chunk:
+                break
+            answer.append(chunk)
+            ev({'type': 'content_block_delta', 'index': 0, 'delta': {'type': 'text_delta', 'text': chunk}})
+        ev({'type': 'content_block_stop', 'index': 0})
+        code = self.proc.wait()
+        full = ''.join(answer).strip()
+        self.history.append(('Assistent', full))
+        if code != 0 and not full:
+            self.on_message({'type': 'result', 'is_error': True, 'result': 'Befehl endete mit Code %s\n%s' % (code, self.stderr_tail)})
+        else:
+            self.on_message({'type': 'result', 'is_error': False})
+
+    def _drain_stderr(self, proc):
+        tail = []
+        for line in proc.stderr:
+            tail.append(line.rstrip())
+            self.stderr_tail = '\n'.join(tail[-20:])
+
+    def answer_permission(self, *a):
+        pass
+
+    def interrupt(self):
+        if self.proc:
+            try:
+                self.proc.terminate()
+            except OSError:
+                pass
+
+    def close(self):
+        self.closed = True
+        self.interrupt()
 
 
 # ----------------------------------------------------------------------------
@@ -265,6 +411,7 @@ class RichTerm(Gtk.Window):
             self.cfg['cwd'] = os.path.abspath(start_dir)
             save_config(self.cfg)
         self.session = None
+        self.profile, self.profile_body, self.profile_created = load_profile(self.cfg['cwd'])
         self.set_default_size(*self.cfg['window'])
         self.connect('destroy', self.on_quit)
         self.connect('key-press-event', self.on_key)
@@ -325,9 +472,23 @@ class RichTerm(Gtk.Window):
         self.notebook.set_current_page(0)
         return False
 
+    def effective(self, key):
+        """Profilwert vor UI-Einstellung."""
+        return self.profile.get(key) or self.cfg.get(key, '')
+
     def ready_event(self, note):
+        if self.profile_created:
+            note = 'Profil angelegt: %s – bitte ausfüllen (Knopf „Profil“), dann „Neu laden“. ' % PROFILE_NAME + note
         return {'type': 'ready', 'cwd': self.cfg['cwd'], 'home': HOME, 'user': os.path.basename(HOME),
-                'model': self.cfg['model'], 'perm': self.cfg['perm'], 'note': note}
+                'model': self.effective('model'), 'perm': self.profile.get('permissions') or self.cfg['perm'],
+                'backend': self.profile.get('backend', 'claude'),
+                'locked': {'model': bool(self.profile.get('model')), 'perm': bool(self.profile.get('permissions'))},
+                'profile': PROFILE_NAME if os.path.exists(os.path.join(self.cfg['cwd'], PROFILE_NAME)) else '',
+                'note': note}
+
+    def reload_profile(self):
+        self.profile, self.profile_body, self.profile_created = load_profile(self.cfg['cwd'])
+        self.end_session()
 
     def on_js_message(self, ucm, result):
         try:
@@ -357,6 +518,14 @@ class RichTerm(Gtk.Window):
                 self.chat_event({'type': 'status', 'text': 'Übernommen. Gilt ab der nächsten Nachricht (neue Sitzung).'})
         elif cmd == 'choose_folder':
             self.choose_folder()
+        elif cmd == 'profile_edit':
+            path = os.path.join(self.cfg['cwd'], PROFILE_NAME)
+            if not os.path.exists(path):
+                load_profile(self.cfg['cwd'])
+            Gtk.show_uri_on_window(self, 'file://' + path, Gdk.CURRENT_TIME)
+        elif cmd == 'profile_reload':
+            self.reload_profile()
+            self.chat_event(self.ready_event('Profil neu geladen · gilt ab der nächsten Nachricht'))
         elif cmd == 'open':
             url = data.get('url', '')
             if url:
@@ -370,7 +539,7 @@ class RichTerm(Gtk.Window):
         if dlg.run() == Gtk.ResponseType.OK:
             self.cfg['cwd'] = dlg.get_filename()
             save_config(self.cfg)
-            self.end_session()
+            self.reload_profile()
             self.chat_event(self.ready_event('Ordner gewechselt: ' + self.cfg['cwd'] + ' · nächste Nachricht startet dort eine neue Sitzung'))
         dlg.destroy()
 
@@ -378,10 +547,19 @@ class RichTerm(Gtk.Window):
         if not text.strip():
             return
         if self.session is None:
+            on_msg = lambda m: GLib.idle_add(self.chat_event, {'type': 'claude', 'msg': m})  # noqa: E731
+            on_exit = lambda code: GLib.idle_add(self.on_session_exit, code)  # noqa: E731
+            prompt = build_system_prompt(self.profile, self.profile_body)
             try:
-                self.session = ClaudeSession(self.cfg['cwd'], self.cfg['model'], self.cfg['perm'], self.port,
-                                             lambda m: GLib.idle_add(self.chat_event, {'type': 'claude', 'msg': m}),
-                                             lambda code: GLib.idle_add(self.on_session_exit, code))
+                if self.profile.get('backend', 'claude').lower() == 'command':
+                    self.session = CommandSession(self.cfg['cwd'], self.profile.get('command', ''),
+                                                  self.effective('model'), prompt, on_msg, on_exit)
+                else:
+                    self.session = ClaudeSession(self.cfg['cwd'], self.effective('model'),
+                                                 self.profile.get('permissions') or self.cfg['perm'], self.port,
+                                                 on_msg, on_exit, system_prompt=prompt,
+                                                 allowed_tools=split_tools(self.profile.get('allowed_tools')),
+                                                 disallowed_tools=split_tools(self.profile.get('disallowed_tools')))
             except Exception as e:  # noqa: BLE001
                 self.chat_event({'type': 'error', 'text': str(e)})
                 return

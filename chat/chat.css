@@ -40,8 +40,10 @@ button, select, textarea { font-family: "DejaVu Sans", system-ui, sans-serif; }
 #bar .spacer { flex: 1; }
 #bar button, #bar select {
   background: var(--surface-2); color: var(--ink); border: 1px solid var(--rule);
-  border-radius: 5px; padding: 4px 10px; font-size: 13px; cursor: pointer;
+  border-radius: 5px; padding: 4px 10px; font-size: 13px; cursor: pointer; white-space: nowrap; flex: none;
 }
+#btn-folder { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; max-width: 46%; direction: rtl; text-align: left; }
+#btn-folder #cwd { direction: ltr; unicode-bidi: embed; }
 #bar button:hover, #bar select:hover { border-color: var(--accent); }
 #cwd { font-family: "DejaVu Sans Mono", monospace; }
 

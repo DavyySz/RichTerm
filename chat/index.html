@@ -12,7 +12,7 @@
 </head>
 <body>
 <header id="bar">
-  <button id="btn-folder" title="Arbeitsordner wählen (Claude sieht die Dateien darin)">📁 <span id="cwd">~</span></button>
+  <button id="btn-folder" title="Arbeitsordner wählen (die KI sieht die Dateien darin)"><span id="cwd">~</span></button>
   <span class="spacer"></span>
   <select id="model" title="Modell">
     <option value="">Standard</option>
@@ -25,6 +25,8 @@
     <option value="acceptEdits">Dateien bearbeiten erlauben</option>
     <option value="bypassPermissions">Alles erlauben</option>
   </select>
+  <button id="btn-profile" title="Profil dieses Ordners (richterm.md) im Editor öffnen">Profil</button>
+  <button id="btn-reload" title="Profil neu laden (nach dem Bearbeiten)">Neu laden</button>
   <button id="btn-theme" title="Hell/Dunkel">☾</button>
   <button id="btn-new" title="Neuen Chat beginnen">Neuer Chat</button>
 </header>
@@ -34,7 +36,8 @@
     <h1>RichTerm</h1>
     <p>Chat mit Claude Code, mit Zugriff auf deine Dateien. Antworten erscheinen hier mit Formeln,
        Diagrammen, Bildern und interaktiven Vorschauen.</p>
-    <p class="hint">Oben links den Ordner wählen, in dem Claude arbeiten soll. Enter sendet, Shift+Enter macht einen Zeilenumbruch.</p>
+    <p class="hint">Oben links den Ordner wählen, in dem die KI arbeiten soll. Im Ordner liegt <code>richterm.md</code>:
+       dort legst du Rolle, Thema, Verhalten und Genauigkeit fest (Knopf „Profil“). Enter sendet, Shift+Enter macht einen Zeilenumbruch.</p>
   </div>
 </main>
 

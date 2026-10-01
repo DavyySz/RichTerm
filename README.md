@@ -28,6 +28,30 @@ Das Terminal bleibt frei und darf geschlossen werden. Außerdem:
 - Rechtsklick im Dateimanager (Nemo) auf einen Ordner oder in einen Ordner → **RichTerm hier öffnen**
 - Doppelklick auf **RichTerm** auf dem Desktop oder im Anwendungsmenü (startet im Home-Ordner)
 
+## Profil pro Ordner: `richterm.md`
+
+Beim ersten Start in einem Ordner legt RichTerm dort die Datei **`richterm.md`** an (aus `profile_template.md`).
+Sie wird bei jedem Start gelesen und der KI als verbindliche Anweisung mitgegeben. Knopf **Profil** öffnet sie
+im Editor, **Neu laden** übernimmt Änderungen.
+
+Oben in der Datei stehen Einstellungen:
+
+| Feld | Bedeutung |
+|---|---|
+| `backend` | `claude` = Claude Code (voller Agent mit Dateizugriff) · `command` = beliebige andere KI mit Kommandozeile (nur Chat) |
+| `model` | Modell, z. B. `opus`, `sonnet`, `haiku`; bei `command` wird es in den Befehl eingesetzt |
+| `command` | nur für `command`: z. B. `ollama run {model}`. Die KI bekommt Profil + Verlauf auf stdin, antwortet auf stdout |
+| `permissions` | `default` (fragen) · `acceptEdits` · `bypassPermissions` |
+| `allowed_tools` / `disallowed_tools` | Werkzeuge einschränken, z. B. `Read Grep Glob` für reines Lesen |
+| `language` | Sprache der Antworten |
+
+Darunter in normalem Text: **Rolle**, **Themengebiet und Ziel**, **Was im Ordner liegt**, **Verhalten**,
+**Genauigkeit und Kreativität**, **Antwortformat**, **Nicht erlaubt**. Die Vorlage enthält zu jedem Abschnitt
+Beispiele; schreib sie einfach um. Werte aus dem Profil haben Vorrang vor der Kopfzeile (die Felder sind dann gesperrt).
+
+So verhält sich die KI im Vorlesungsordner wie ein Tutor und im Projektordner wie ein Entwickler, ohne dass du
+es jedes Mal erklären musst.
+
 ## Chat
 
 1. Oben links mit 📁 den **Arbeitsordner** wählen. Claude sieht und bearbeitet Dateien in diesem Ordner.
@@ -74,6 +98,7 @@ Funktioniert in den RichTerm-Terminals und in jedem anderen Terminal, solange Ri
 RichTerm/
 ├── richterm.py     App: Fenster, Claude-Code-Sitzung (Streaming), HTTP-Server, Terminal-Tabs
 ├── chat/           Chat-Oberfläche (index.html, chat.css, chat.js)
+├── profile_template.md   Vorlage für richterm.md
 ├── bin/rt          Befehl zum Senden aus dem Terminal
 ├── vendor/         KaTeX, marked, mermaid (offline)
 └── start.sh        Starter
