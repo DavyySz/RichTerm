@@ -93,7 +93,8 @@ Die Suche ist **hybrid**: Stichwörter (BM25) plus Bedeutung über ein kleines l
 „Lernrate“, und Fragen ohne Bezug zu den Unterlagen liefern keine Treffer. Wie streng, wählst du im Menü
 **Unterlagen** in der Kopfzeile: *aus* · *ergänzend* (Standard: Unterlagen als Hauptquelle, eigenes Wissen gekennzeichnet)
 · *nur daraus* (ausschließlich aus den Unterlagen, sonst „dazu steht nichts in den Unterlagen“). Gilt pro Ordner. `@vorlesung_03.pdf` in der
-Frage gibt die ganze Datei mit, z. B. für Zusammenfassungen.
+Frage gibt die ganze Datei mit, z. B. für Zusammenfassungen. Unterordner werden immer mit durchsucht; `rag <ordner>` oder
+`rag <datei>` am Anfang der Frage beschränkt die Suche auf diesen Teil (`rag mcts Welche Phasen …`).
 
 ## Gedächtnis: `richterm-verlauf.md`
 

@@ -761,8 +761,9 @@ class Rag:
                     out.append(os.path.join(root, n))
         return sorted(out)
 
-    def refresh(self):
-        """Index mit dem Ordner abgleichen. -> (anzahl dateien, anzahl abschnitte, geändert?)"""
+    def refresh(self, embed=True, progress=None):
+        """Index mit dem Ordner abgleichen. embed=False: nur Text (schnell, für die laufende Frage);
+        die Einbettungen rechnet der Hintergrund nach. -> (anzahl dateien, anzahl abschnitte, geändert?)"""
         if not self.exists():
             return 0, 0, False
         changed = False
@@ -788,33 +789,82 @@ class Rag:
                     del self.docs[rel]
                     changed = True
             # Einbettungen für Abschnitte ohne Vektor nachholen (semantische Suche), falls das Modell da ist
-            if self.use_embeddings is None:
-                self.use_embeddings = embed_model_available()
-            if self.use_embeddings:
-                todo = [c for d in self.docs.values() for c in d['chunks'] if 'vec' not in c]
-                for i in range(0, len(todo), 32):
-                    batch = todo[i:i + 32]
-                    vecs = embed_texts([c['text'] for c in batch])
-                    if not vecs:
-                        break
-                    for c, v in zip(batch, vecs):
-                        c['vec'] = v
-                    changed = True
             if changed:
                 self._save_index()
             n_chunks = sum(len(d['chunks']) for d in self.docs.values())
+        if embed:
+            changed = self.embed_missing(progress) or changed
         return len(self.docs), n_chunks, changed
 
-    def search(self, query, k=None):
+    def embed_missing(self, progress=None):
+        """Vektoren für Abschnitte ohne Einbettung nachrechnen (Hintergrund). -> etwas geändert?"""
+        if self.use_embeddings is None:
+            self.use_embeddings = embed_model_available()
+        if not self.use_embeddings:
+            return False
+        with self.lock:
+            todo = [c for d in self.docs.values() for c in d['chunks'] if 'vec' not in c]
+            total = sum(len(d['chunks']) for d in self.docs.values())
+        if not todo:
+            return False
+        done = total - len(todo)
+        for i in range(0, len(todo), 16):
+            batch = todo[i:i + 16]
+            vecs = embed_texts([c['text'] for c in batch])
+            if not vecs:
+                break
+            with self.lock:
+                for c, v in zip(batch, vecs):
+                    c['vec'] = v
+                done += len(batch)
+                if i % 64 == 0 or done == total:
+                    self._save_index()
+            if progress:
+                progress(done, total)
+        with self.lock:
+            self._save_index()
+        return True
+
+    @staticmethod
+    def parse_scope(question):
+        """'rag pfad/zu/ordner' oder 'rag pfad/datei.pdf' in der Frage -> (bereinigte frage, [pfade]).
+        Ein Ordner wird samt Unterordnern durchsucht, eine Datei nur selbst. Mehrere Angaben möglich."""
+        import re
+        scopes = []
+
+        def grab(m):
+            scopes.append(m.group(1).strip('/'))
+            return ' '
+        cleaned = re.sub(r'(?:^|(?<=\s))rag[: ]+([\w][\w./\-]*)', grab, question, flags=re.I)
+        return ' '.join(cleaned.split()), scopes
+
+    def _in_scope(self, rel, scopes):
+        if not scopes:
+            return True
+        r = rel.lower()
+        for sc in scopes:
+            sc = sc.lower()
+            if r == sc or r.startswith(sc + '/') or os.path.splitext(r)[0] == sc:
+                return True
+            # Ordner- oder Dateiname ohne vollständigen Pfad (z.B. nur 'mcts' oder 'lern.pdf')
+            parts = r.split('/')
+            if sc in parts or os.path.basename(r) == sc or os.path.splitext(os.path.basename(r))[0] == sc:
+                return True
+        return False
+
+    def search(self, query, k=None, scopes=None):
         """Hybride Suche: BM25 (Stichwörter) + Einbettungen (Bedeutung), zusammengeführt per Reciprocal Rank Fusion.
-        -> [(score, datei, seite, text)]"""
+        scopes: nur diese Ordner (mit Unterordnern) bzw. Dateien durchsuchen. -> [(score, datei, seite, text)]"""
         k = k or self.top_k
         with self.lock:
-            entries = [(rel, c['page'], c['text'], c.get('vec')) for rel, d in self.docs.items() for c in d['chunks']]
+            entries = [(rel, c['page'], c['text'], c.get('vec')) for rel, d in self.docs.items()
+                       if self._in_scope(rel, scopes) for c in d['chunks']]
         if not entries:
             return []
         bm = self._bm25(query, [(r, p, t) for r, p, t, _ in entries])
         ranks = {}
+        if self.use_embeddings is None:
+            self.use_embeddings = embed_model_available()
         for rank, (sc, i) in enumerate(bm):
             ranks[i] = ranks.get(i, 0) + 1.0 / (60 + rank)
         if self.use_embeddings and any(v for _, _, _, v in entries):
@@ -875,9 +925,12 @@ class Rag:
         return scores[:max(self.top_k * 4, 20)]
 
     def context_for(self, question, max_full_chars=60000):
-        """-> (kontextblock für das modell, [quellenliste für die anzeige])"""
+        """-> (kontextblock für das modell, [quellenliste für die anzeige], bereinigte frage)"""
         import re
+        question, scopes = self.parse_scope(question)
         parts, sources = [], []
+        if scopes:
+            sources.append('Suchbereich: ' + ', '.join(scopes))
         # @datei.pdf in der Frage: ganze Datei mitgeben
         for name in re.findall(r'@([\w][\w.\-]*)', question):
             ft = self.full_text(name, max_full_chars)
@@ -885,7 +938,7 @@ class Rag:
                 rel, text = ft
                 parts.append('[Datei %s, vollständig]\n%s' % (rel, text))
                 sources.append(rel + ' (ganz)')
-        hits = self.search(question)
+        hits = self.search(question, scopes=scopes)
         for n, (sc, rel, page, text) in enumerate(hits, 1):
             label = rel + (' ' + page if page else '')
             if any(src.startswith(rel + ' (ganz)') for src in sources):
@@ -897,8 +950,8 @@ class Rag:
             if self.strict:
                 return ('Zu dieser Frage wurden KEINE passenden Stellen in den Unterlagen (Ordner rag/) gefunden. '
                         'Strenger Modus: Antworte, dass die Unterlagen dazu nichts enthalten, und beantworte die Frage '
-                        'nicht aus eigenem Wissen (außer der Nutzer bittet ausdrücklich darum).'), []
-            return '', []
+                        'nicht aus eigenem Wissen (außer der Nutzer bittet ausdrücklich darum).'), sources, question
+            return '', sources if scopes else [], question
         if self.strict:
             rule = ('Strenger Modus: Beantworte die Frage AUSSCHLIESSLICH aus diesen Auszügen. Jede Aussage bekommt eine '
                     'Quellenangabe (z.B. [2] oder "laut vorlesung_03.pdf S. 4"). Steht etwas nicht in den Auszügen, '
@@ -908,7 +961,7 @@ class Rag:
                     'Ergänzt du etwas aus eigenem Wissen, kennzeichne es als solches. Sag es, wenn die Unterlagen die '
                     'Frage nicht abdecken.')
         block = 'Auszüge aus den Unterlagen des Nutzers (Ordner rag/). ' + rule + '\n\n' + '\n\n'.join(parts)
-        return block, sources
+        return block, sources, question
 
 # ----------------------------------------------------------------------------
 # Verlauf: richterm-verlauf.md im Arbeitsordner.
@@ -1518,9 +1571,14 @@ class Core:
             return
         if find_ollama() and not embed_model_available():
             self.ensure_embed_model()
-        files, chunks, changed = rag.refresh()
+        files, chunks, changed = rag.refresh(embed=False)
         if changed:
             self.ui(self.chat_event, {'type': 'status', 'text': 'Unterlagen indexiert: %d Dateien, %d Abschnitte (rag/)' % (files, chunks)})
+
+        def progress(done, total):
+            self.ui(self.chat_event, {'type': 'status', 'text': 'Unterlagen: Bedeutungssuche wird vorbereitet … %d/%d Abschnitte' % (done, total)})
+        if rag.embed_missing(progress):
+            self.ui(self.chat_event, {'type': 'status', 'text': 'Unterlagen bereit: %d Dateien, %d Abschnitte, Bedeutungssuche aktiv' % (files, chunks)})
 
     def make_history(self):
         enabled = str(self.profile.get('history', 'true')).lower() not in ('false', 'no', 'nein', '0', 'off')
@@ -1689,9 +1747,14 @@ class Core:
         # Unterlagen aus rag/: passende Abschnitte zur Frage mitgeben
         rag_block, sources = '', []
         if self.rag and self.rag.exists():
-            self.rag.refresh()
+            files0 = set(self.rag.docs)
+            self.rag.refresh(embed=False)                   # neue Dateien sofort per Stichwortsuche nutzbar
+            if set(self.rag.docs) != files0:
+                threading.Thread(target=self.rag_refresh, daemon=True).start()   # Einbettungen im Hintergrund
             is_cloud = self.profile.get('backend', 'claude').lower() != 'command'
-            rag_block, sources = self.rag.context_for(text, max_full_chars=80000 if is_cloud else 12000)
+            rag_block, sources, text_clean = self.rag.context_for(text, max_full_chars=80000 if is_cloud else 12000)
+            if text_clean != text:
+                shown = shown.replace(text, text_clean, 1) if text in shown else text_clean
         model_text = (rag_block + '\n\n---\n\nFrage des Nutzers:\n' + shown) if rag_block else shown
         content = model_text
         if blocks:
