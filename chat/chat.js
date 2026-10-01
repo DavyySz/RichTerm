@@ -303,7 +303,11 @@
       b = { kind, text: '', el: null };
       a.blocks[index] = b;
       if (kind === 'text') { b.el = document.createElement('div'); a.bubble.appendChild(b.el); }
-      if (kind === 'thinking') { b.el = document.createElement('div'); b.el.className = 'thinking'; b.el.textContent = 'denkt nach'; a.bubble.appendChild(b.el); }
+      if (kind === 'thinking') {
+        b.el = document.createElement('details'); b.el.className = 'thinking-box';
+        b.el.innerHTML = '<summary><span class="thinking">denkt nach</span></summary><div class="thinking-text"></div>';
+        a.bubble.appendChild(b.el);
+      }
     }
     return b;
   }
@@ -331,7 +335,7 @@
     const texts = [];
     for (const k of Object.keys(current.blocks).sort((a, b) => a - b)) {
       const b = current.blocks[k];
-      if (b.kind === 'thinking' && b.el) b.el.remove();
+      if (b.kind === 'thinking' && b.el) { if (b.text.trim()) { b.el.querySelector('summary').innerHTML = 'Gedankengang (' + b.text.length + ' Zeichen)'; b.el.open = false; } else b.el.remove(); }
       if (b.kind === 'text' && b.el) { if (!b.done) finalizeBlock(b); texts.push(b.text); }
     }
     cancelRender();
@@ -401,6 +405,8 @@
         window.RT_USER = ev.user;
         fillModels(ev.models || [], ev.current || 'claude:');
         $('ragmode').value = ev.ragmode || 'on';
+        $('think').value = ev.think || 'auto';
+        $('think').hidden = ev.backend !== 'command';     // nur bei lokalen Modellen sinnvoll
         $('ragmode').title = ev.ragfiles != null && ev.ragmode !== 'off'
           ? ('Ordner rag/: ' + ev.ragfiles + ' Datei(en). Lege Folien, Skripte, Notizen hinein.')
           : 'Unterlagen aus dem Ordner rag/ im Arbeitsordner (gilt für diesen Ordner)';
@@ -455,9 +461,16 @@
       } else if (e.type === 'content_block_delta') {
         const d = e.delta;
         if (d.type === 'text_delta') { const b = blockFor(e.index, 'text'); b.text += d.text; scheduleRender(b); }
+        else if (d.type === 'thinking_delta' && d.thinking) {
+          const b = blockFor(e.index, 'thinking'); b.text += d.thinking;
+          const t = b.el && b.el.querySelector('.thinking-text'); if (t) { t.textContent = b.text; scrollDown(); }
+        }
       } else if (e.type === 'content_block_stop') {
         const b = current && current.blocks[e.index];
-        if (b && b.kind === 'thinking' && b.el) b.el.remove();
+        if (b && b.kind === 'thinking' && b.el) {
+          if (b.text.trim()) { b.el.querySelector('summary').innerHTML = 'Gedankengang (' + b.text.length + ' Zeichen)'; b.el.open = false; }
+          else b.el.remove();
+        }
         if (b && b.kind === 'text' && b.el) finalizeBlock(b);
       }
       return;
@@ -588,6 +601,7 @@
   $('btn-pull-cancel').onclick = () => { $('pull-box').hidden = true; send({ cmd: 'ready' }); };
   $('perm').onchange = () => send({ cmd: 'set', key: 'perm', value: $('perm').value });
   $('ragmode').onchange = () => send({ cmd: 'set_ragmode', value: $('ragmode').value });
+  $('think').onchange = () => send({ cmd: 'set_think', value: $('think').value });
   $('btn-theme').onclick = () => { theme = theme === 'light' ? 'dark' : 'light'; applyPrefs(); };
   document.addEventListener('keydown', e => {
     if (e.ctrlKey && (e.key === '+' || e.key === '=')) { fontSize = Math.min(fontSize + 1, 40); applyPrefs(); e.preventDefault(); }

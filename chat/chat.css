@@ -183,3 +183,11 @@ button:focus-visible, select:focus-visible, textarea:focus-visible, input:focus-
 
 /* Quellen aus rag/ unter der Frage */
 .sources { text-align: right; font-family: "DejaVu Sans", sans-serif; font-size: 12px; color: var(--ink-soft); margin-top: 4px; }
+
+/* Gedankengang (Denkmodus) */
+.thinking-box { margin: 4px 0 8px; border-left: 2px solid var(--rule-strong); padding-left: 10px; font-family: "DejaVu Sans", sans-serif; font-size: 12.5px; color: var(--ink-soft); }
+.thinking-box summary { cursor: pointer; list-style: none; }
+.thinking-box summary::-webkit-details-marker { display: none; }
+.thinking-box summary::before { content: '▸ '; }
+.thinking-box[open] summary::before { content: '▾ '; }
+.thinking-text { white-space: pre-wrap; margin-top: 4px; max-height: 260px; overflow: auto; font-size: 12px; }

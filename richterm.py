@@ -367,9 +367,10 @@ class OllamaSession:
     Verlauf innerhalb der Sitzung. Wird automatisch statt `ollama run` benutzt."""
     name = 'Ollama'
 
-    def __init__(self, cwd, model, system_prompt, on_message, on_exit):
+    def __init__(self, cwd, model, system_prompt, on_message, on_exit, think='auto'):
         self.cwd = cwd
         self.model = model
+        self.think = think                 # 'auto' (Modellstandard) | 'on' | 'off'
         self.on_message = on_message
         self.on_exit = on_exit
         self.messages = [{'role': 'system', 'content': system_prompt}]
@@ -414,40 +415,68 @@ class OllamaSession:
                 threads = len(cores)
         except OSError:
             pass
-        body = json.dumps({'model': self.model, 'messages': self.messages, 'stream': True,
-                           'options': {'num_ctx': 8192, 'num_thread': threads}}).encode('utf-8')
+        payload = {'model': self.model, 'messages': self.messages, 'stream': True,
+                   'options': {'num_ctx': 8192, 'num_thread': threads}}
+        if self.think in ('on', 'off'):
+            payload['think'] = self.think == 'on'
         self.on_message({'type': 'system', 'subtype': 'status', 'status': 'ollama_thinking',
-                         'text': 'Lokales Modell %s liest die Anfrage (%d Kerne) …' % (self.model, threads)})
-        req = urllib.request.Request('http://%s/api/chat' % self.host, data=body,
-                                     headers={'Content-Type': 'application/json'})
+                         'text': 'Lokales Modell %s liest die Anfrage (%d Kerne%s) …' % (
+                             self.model, threads, ', Denkmodus' if self.think == 'on' else '')})
         ev = lambda e: self.on_message({'type': 'stream_event', 'event': e})  # noqa: E731
         ev({'type': 'message_start'})
-        ev({'type': 'content_block_start', 'index': 0, 'content_block': {'type': 'text', 'text': ''}})
-        answer = []
-        try:
-            self.resp = urllib.request.urlopen(req, timeout=600)
-            for line in self.resp:
-                if self.stop:
-                    break
-                try:
-                    chunk = json.loads(line.decode('utf-8'))
-                except ValueError:
-                    continue
-                piece = (chunk.get('message') or {}).get('content', '')
-                if piece:
-                    answer.append(piece)
-                    ev({'type': 'content_block_delta', 'index': 0, 'delta': {'type': 'text_delta', 'text': piece}})
-                if chunk.get('error'):
-                    answer.append('\n\nFehler: ' + chunk['error'])
-                if chunk.get('done'):
-                    break
-        except Exception as e:  # noqa: BLE001
-            if not self.stop:
+        answer, thinking_open, text_open = [], False, False
+
+        def open_text():
+            nonlocal text_open, thinking_open
+            if thinking_open:
                 ev({'type': 'content_block_stop', 'index': 0})
-                self.on_message({'type': 'result', 'is_error': True,
-                                 'result': 'Ollama-Fehler: %s (Modell %s geladen? `ollama list`)' % (e, self.model)})
-                return
-        ev({'type': 'content_block_stop', 'index': 0})
+                thinking_open = False
+            if not text_open:
+                ev({'type': 'content_block_start', 'index': 1, 'content_block': {'type': 'text', 'text': ''}})
+                text_open = True
+        for attempt in (1, 2):
+            try:
+                req = urllib.request.Request('http://%s/api/chat' % self.host, data=json.dumps(payload).encode('utf-8'),
+                                             headers={'Content-Type': 'application/json'})
+                self.resp = urllib.request.urlopen(req, timeout=600)
+                for line in self.resp:
+                    if self.stop:
+                        break
+                    try:
+                        chunk = json.loads(line.decode('utf-8'))
+                    except ValueError:
+                        continue
+                    msg = chunk.get('message') or {}
+                    th = msg.get('thinking', '')
+                    if th:
+                        if not thinking_open:
+                            ev({'type': 'content_block_start', 'index': 0, 'content_block': {'type': 'thinking', 'thinking': ''}})
+                            thinking_open = True
+                        ev({'type': 'content_block_delta', 'index': 0, 'delta': {'type': 'thinking_delta', 'thinking': th}})
+                    piece = msg.get('content', '')
+                    if piece:
+                        open_text()
+                        answer.append(piece)
+                        ev({'type': 'content_block_delta', 'index': 1, 'delta': {'type': 'text_delta', 'text': piece}})
+                    if chunk.get('error'):
+                        open_text()
+                        answer.append('\n\nFehler: ' + chunk['error'])
+                    if chunk.get('done'):
+                        break
+                break
+            except Exception as e:  # noqa: BLE001
+                err = str(e)
+                if attempt == 1 and 'think' in payload and ('400' in err or 'think' in err.lower()):
+                    payload.pop('think', None)          # Modell kennt keinen Denkmodus: ohne noch einmal
+                    continue
+                if not self.stop:
+                    open_text()
+                    ev({'type': 'content_block_stop', 'index': 1})
+                    self.on_message({'type': 'result', 'is_error': True,
+                                     'result': 'Ollama-Fehler: %s (Modell %s geladen? `ollama list`)' % (e, self.model)})
+                    return
+        open_text()
+        ev({'type': 'content_block_stop', 'index': 1})
         full = ''.join(answer).strip()
         self.messages.append({'role': 'assistant', 'content': full})
         self.history.append(('Assistent', full))
@@ -1427,7 +1456,7 @@ class Core:
                 'locked': {'model': False, 'perm': bool(self.profile_perm())},
                 'profile': PROFILE_NAME if os.path.exists(os.path.join(self.cfg['cwd'], PROFILE_NAME)) else '',
                 'replay': [{'role': r, 'time': t, 'text': x} for r, t, x in self.history.recent_turns()] if replay else [],
-                'ragmode': self.rag_mode(), 'ragfiles': ragfiles,
+                'ragmode': self.rag_mode(), 'ragfiles': ragfiles, 'think': self.think_mode(),
                 'note': note}
 
     def model_choices(self, local=True):
@@ -1532,6 +1561,19 @@ class Core:
         if rag and rag.exists():
             threading.Thread(target=self.rag_refresh, args=(rag,), daemon=True).start()
         return rag
+
+    def think_mode(self):
+        v = str(self.profile.get('think', 'auto')).lower()
+        return v if v in ('auto', 'on', 'off') else 'auto'
+
+    def set_think_mode(self, mode):
+        update_profile_settings(self.cfg['cwd'], think=mode)
+        self.profile, self.profile_body, self.profile_created = load_profile(self.cfg['cwd'])
+        self.profile_loaded_at = self.profile_mtime()
+        if self.session is not None and hasattr(self.session, 'think'):
+            self.session.think = mode        # gilt sofort für die nächste Nachricht, Sitzung bleibt
+        labels = {'auto': 'Denkmodus: Modellstandard', 'on': 'Denkmodus an (genauer bei Mathe, langsamer)', 'off': 'Denkmodus aus (schneller)'}
+        self.chat_event({'type': 'status', 'text': labels.get(mode, mode)})
 
     def rag_mode(self):
         if not self.rag:
@@ -1651,6 +1693,8 @@ class Core:
             self.chat_event({'type': 'status', 'text': 'Neuer Chat (ohne Fortsetzung der alten Claude-Sitzung) · Ordner: ' + self.cfg['cwd']})
         elif cmd == 'refresh_models':
             self.refresh_models_async()
+        elif cmd == 'set_think':
+            self.set_think_mode(data.get('value', 'auto'))
         elif cmd == 'set_ragmode':
             self.set_rag_mode(data.get('value', 'on'))
         elif cmd == 'choose_model':
@@ -1776,7 +1820,8 @@ class Core:
                 if self.profile.get('backend', 'claude').lower() == 'command':
                     command = (self.profile.get('command') or '').strip()
                     if command.startswith('ollama run') or command.startswith('ollama'):
-                        self.session = OllamaSession(self.cfg['cwd'], self.effective('model'), prompt, on_msg, on_exit)
+                        self.session = OllamaSession(self.cfg['cwd'], self.effective('model'), prompt, on_msg, on_exit,
+                                                     think=self.think_mode())
                     else:
                         self.session = CommandSession(self.cfg['cwd'], command, self.effective('model'), prompt, on_msg, on_exit)
                 else:

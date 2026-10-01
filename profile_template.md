@@ -53,6 +53,9 @@ rag_chunks: 6
 # Gut für Klausurvorbereitung, wenn nur zählt, was der Prof gesagt hat.
 rag_strict: false
 # Tipp: "@vorlesung_03.pdf" in der Frage gibt die ganze Datei mit (für Zusammenfassungen).
+
+# Denkmodus lokaler Modelle (qwen3, deepseek-r1 …): auto | on | off. Wählbar auch oben im Chat.
+think: auto
 ---
 
 # Rolle
