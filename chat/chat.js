@@ -321,11 +321,17 @@
     input.value = ''; autosize();
     send({ cmd: 'send', text });
   }
-  function autosize() { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, window.innerHeight * 0.4) + 'px'; }
+  function autosize() {
+    // Höhe an den Inhalt anpassen: erst zurücksetzen, dann auf die Inhaltshöhe setzen (max. 40 % des Fensters)
+    input.style.height = '0px';
+    const h = Math.min(input.scrollHeight, Math.floor(window.innerHeight * 0.4));
+    input.style.height = Math.max(h, 42) + 'px';
+  }
   input.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
   });
   input.addEventListener('input', autosize);
+  window.addEventListener('resize', autosize);
   $('btn-send').onclick = submit;
   $('btn-stop').onclick = () => send({ cmd: 'interrupt' });
   $('btn-new').onclick = () => { send({ cmd: 'new' }); messages.querySelectorAll('.msg').forEach(m => m.remove()); $('welcome').hidden = false; current = null; setBusy(false); };
