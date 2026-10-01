@@ -461,6 +461,19 @@ class OllamaSession:
                 self.resp.close()
         except Exception:  # noqa: BLE001
             pass
+        # Ollama rechnet sonst weiter, bis es das erste Wort senden will: Modell sofort entladen,
+        # das bricht die laufende Berechnung ab (wird beim nächsten Mal neu geladen, ~10-30 s).
+        threading.Thread(target=self._unload, daemon=True).start()
+
+    def _unload(self):
+        import urllib.request
+        try:
+            req = urllib.request.Request('http://%s/api/generate' % self.host,
+                                         data=json.dumps({'model': self.model, 'keep_alive': 0}).encode(),
+                                         headers={'Content-Type': 'application/json'})
+            urllib.request.urlopen(req, timeout=10).read()
+        except Exception:  # noqa: BLE001
+            pass
 
     def close(self):
         self.interrupt()
