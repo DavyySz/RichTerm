@@ -63,7 +63,9 @@
 <pre><code>git clone https://github.com/DavyySz/RichTerm.git
 cd RichTerm
 ./richterm</code></pre>
-<p>Beim ersten Start richtet sich RichTerm selbst ein: Es prüft die Systempakete und installiert fehlende (fragt nach dem Administrator-Passwort), legt die Befehle <code>richterm</code> und <code>rt</code> an, Menü- und Desktop-Einträge, und bietet an, Claude Code und ein lokales Ollama zu installieren. Ist alles da, startet es einfach. Nur Linux.</p>
+<p>Beim ersten Start richtet sich RichTerm selbst ein: Es prüft die Systempakete und installiert fehlende (fragt nach dem Administrator-Passwort), legt die Befehle <code>richterm</code> und <code>rt</code> an, Menü- und Desktop-Einträge, und bietet an, Claude Code und ein lokales Ollama zu installieren. Ist alles da, startet es einfach.</p>
+<h3>macOS: Browser-Modus</h3>
+<p>Auf dem Mac gibt es kein natives Fenster (die Terminal- und Browser-Engine des Linux-Fensters existieren dort nicht). Stattdessen startet <code>richterm</code> den <b>Browser-Modus</b>: Python liefert den Chat aus, und er öffnet sich als eigenes Fenster in Chrome, Chromium oder Edge (ohne Adressleiste), sonst im Standardbrowser. Alles außer den Terminal-Tabs funktioniert gleich. Den Arbeitsordner gibst du beim Start an (<code>richterm ~/Uni/ML</code>) oder über den Ordnerknopf (Pfad eintippen). RichTerm beendet sich von selbst etwa 90 Sekunden nach dem Schließen des Browserfensters. Unter Linux erzwingt <code>richterm --web</code> denselben Modus.</p>
 <h3>Im aktuellen Ordner (der übliche Weg)</h3>
 <pre><code>cd ~/Uni/Maschinelles_Lernen     # Ordner mit Folien, Übungen, Notizen
 richterm                        # RichTerm öffnet sich mit diesem Ordner</code></pre>
@@ -78,7 +80,7 @@ richterm                        # RichTerm öffnet sich mit diesem Ordner</code>
 <h2>3. Die Oberfläche</h2>
 <table>
   <tr><th>Element</th><th>Funktion</th></tr>
-  <tr><td>Ordnerknopf (oben links)</td><td>Zeigt den Arbeitsordner; Klick öffnet die Ordnerwahl. Ein Wechsel startet eine neue Sitzung.</td></tr>
+  <tr><td>Ordnerknopf (oben links)</td><td>Zeigt den Arbeitsordner; Klick öffnet die Ordnerwahl (im Browser-Modus: Pfad eintippen). Ein Wechsel startet eine neue Sitzung.</td></tr>
   <tr><td>Modellmenü</td><td>Welche KI antwortet: Claude-Modelle, lokale Modelle, „Lokales Modell herunterladen …“ (Abschnitt 5). Gilt für diesen Ordner.</td></tr>
   <tr><td>Berechtigungen</td><td>Fragen / Dateien bearbeiten erlauben / Alles erlauben (Abschnitt 7). Gesperrt, wenn das Profil es festlegt.</td></tr>
   <tr><td>Profil</td><td>Öffnet <code>richterm.md</code> im Editor.</td></tr>

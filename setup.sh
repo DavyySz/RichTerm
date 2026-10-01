@@ -7,7 +7,8 @@
 #   setup.sh --full               alles einrichten, ohne danach zu starten (= install.sh)
 #   setup.sh --uninstall          Verknüpfungen entfernen
 set -u
-DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+realpath_py() { python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$1"; }   # macOS hat kein readlink -f
+DIR="$(cd "$(dirname "$(realpath_py "${BASH_SOURCE[0]}")")" && pwd)"
 BIN="$HOME/.local/bin"
 APPS="$HOME/.local/share/applications"
 CFG="$HOME/.config/richterm.json"
@@ -27,11 +28,15 @@ missing_packages() {           # gibt die fehlenden Komponenten als Wörter aus
   have_gi Vte 2.91     || echo vte
   have_gi WebKit2 4.1  || echo webkit
 }
-links_ok() { [ "$(readlink -f "$BIN/richterm" 2>/dev/null)" = "$DIR/start.sh" ] && [ "$(readlink -f "$BIN/rt" 2>/dev/null)" = "$DIR/bin/rt" ]; }
+links_ok() { [ -e "$BIN/richterm" ] && [ "$(realpath_py "$BIN/richterm")" = "$DIR/start.sh" ] && [ -e "$BIN/rt" ] && [ "$(realpath_py "$BIN/rt")" = "$DIR/bin/rt" ]; }
 
+is_mac() { [ "$(uname -s)" = Darwin ]; }
 check_quiet() {
-  [ "$(uname -s)" = Linux ] || return 1
-  [ -z "$(missing_packages)" ] || return 1
+  command -v python3 >/dev/null || return 1
+  if ! is_mac; then
+    # Linux: natives Fenster braucht GTK/VTE/WebKit; fehlt es, geht der Browser-Modus trotzdem
+    [ -z "$(missing_packages)" ] || [ -n "${RICHTERM_WEB:-}" ] || return 1
+  fi
   links_ok || return 1
   return 0
 }
@@ -102,6 +107,11 @@ make_links() {
     warn "$BIN ist nicht im PATH. Zeile in ~/.bashrc ergänzen:  export PATH=\"\$HOME/.local/bin:\$PATH\""
     grep -q 'local/bin' "$HOME/.bashrc" 2>/dev/null || { echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"; ok "in ~/.bashrc eingetragen (gilt für neue Terminals)"; } ;;
   esac
+  if is_mac; then
+    grep -q 'local/bin' "$HOME/.zshrc" 2>/dev/null || { echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.zshrc"; ok "PATH in ~/.zshrc eingetragen (gilt für neue Terminals)"; }
+    claude_md_hint
+    return 0
+  fi
   cat > "$APPS/richterm.desktop" <<EOF
 [Desktop Entry]
 Type=Application
@@ -120,6 +130,9 @@ EOF
     printf '[Nemo Action]\nName=RichTerm in diesem Ordner öffnen\nComment=Claude-Chat mit dem gewählten Ordner starten\nExec=<richterm %%F>\nIcon-Name=utilities-terminal\nSelection=s\nExtensions=dir;\nQuote=double\n' > "$HOME/.local/share/nemo/actions/richterm-folder.nemo_action"
     ok "Rechtsklick-Eintrag im Dateimanager (Nemo)"
   fi
+  claude_md_hint
+}
+claude_md_hint() {
   mkdir -p "$HOME/.claude"
   if ! grep -q "RichTerm" "$HOME/.claude/CLAUDE.md" 2>/dev/null; then
     cat >> "$HOME/.claude/CLAUDE.md" <<'EOF'
@@ -168,6 +181,13 @@ EOF
 setup_ollama() {
   if [ -x "$OLLAMA_BIN" ] || command -v ollama >/dev/null; then ok "Ollama (lokale Modelle) vorhanden"; return 0; fi
   cfg_flag ollama_asked && return 0            # schon einmal verneint: nicht wieder fragen
+  if is_mac; then
+    if ask "Lokale, kostenlose KI-Modelle möglich machen? Installiert Ollama (brew install ollama, sonst App von ollama.com)."; then
+      if command -v brew >/dev/null; then brew install ollama && ok "Ollama installiert"; else
+        warn "Kein Homebrew: bitte die Ollama-App von https://ollama.com laden und einmal starten"; fi
+    else cfg_flag ollama_asked set; warn "übersprungen"; fi
+    return 0
+  fi
   if ask "Lokale, kostenlose KI-Modelle möglich machen? Lädt Ollama nach ~/.local/share/ollama (ca. 1,4 GB)."; then
     command -v zstd >/dev/null || install_packages zstd
     mkdir -p "$HOME/.local/share/ollama/dist"
@@ -186,16 +206,23 @@ setup_ollama() {
 # ---------------------------------------------------------------- Ablauf
 run_setup() {                  # $1 = "start" → danach RichTerm starten, $2 = Ordner
   echo "RichTerm einrichten ($DIR)"
-  if [ "$(uname -s)" != Linux ]; then fail "RichTerm läuft nur unter Linux (GTK/VTE/WebKitGTK)."; return 1; fi
   echo; echo "1. Systempakete"
-  local miss; miss="$(missing_packages | tr '\n' ' ')"
-  if [ -n "$miss" ]; then
-    warn "fehlt: $miss"
-    install_packages $miss || return 1
-    miss="$(missing_packages | tr '\n' ' ')"
-    if [ -n "$miss" ]; then fail "immer noch nicht verfügbar: $miss"; return 1; fi
+  if is_mac; then
+    command -v python3 >/dev/null && ok "python3 $(python3 --version 2>&1 | cut -d' ' -f2) (macOS: Browser-Modus, kein GTK nötig)" || {
+      if command -v brew >/dev/null; then brew install python3; else
+        fail "python3 fehlt. Homebrew installieren (https://brew.sh) und 'brew install python3', oder Python von python.org"; return 1; fi; }
+  else
+    local miss; miss="$(missing_packages | tr '\n' ' ')"
+    if [ -n "$miss" ]; then
+      warn "fehlt: $miss"
+      if ! install_packages $miss; then
+        warn "Systempakete nicht installierbar: RichTerm läuft dann im Browser-Modus (richterm --web)."
+      fi
+      miss="$(missing_packages | tr '\n' ' ')"
+      [ -n "$miss" ] && warn "ohne $miss kein natives Fenster; Browser-Modus wird benutzt"
+    fi
+    [ -z "$(missing_packages)" ] && ok "Python, GTK 3, VTE, WebKitGTK"
   fi
-  ok "Python, GTK 3, VTE, WebKitGTK"
   echo; echo "2. Befehle und Menüeinträge"; make_links
   echo; echo "3. Claude Code"; setup_claude
   echo; echo "4. Lokale KI (optional)"; setup_ollama

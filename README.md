@@ -13,7 +13,7 @@ Dazu Tabs mit einem vollwertigen Terminal (VTE, dieselbe Engine wie GNOME Termin
 
 **Ausführliche Bedienungsanleitung:** [`docs/ANLEITUNG.pdf`](docs/ANLEITUNG.pdf) (Quelle `docs/ANLEITUNG.html`, neu bauen mit `docs/build.sh`).
 
-## Installation (Linux)
+## Installation (Linux und macOS)
 
 ```bash
 git clone https://github.com/DavyySz/RichTerm.git
@@ -34,7 +34,13 @@ und [Claude Code](https://docs.anthropic.com/claude-code) (`claude`, einmal gest
 funktioniert nur der Chat mit lokalen Modellen. Die JavaScript-Bibliotheken (KaTeX, marked, mermaid, highlight.js)
 liegen in `vendor/`, alles läuft offline.
 
-**macOS und Windows werden nicht unterstützt** (VTE und WebKitGTK gibt es dort nicht als nutzbare Pakete).
+**macOS:** gleicher Ablauf (`git clone … && cd RichTerm && ./richterm`). Dort läuft RichTerm im **Browser-Modus**:
+Python startet den Server, der Chat öffnet sich als eigenes Fenster in Chrome/Chromium/Edge (ohne Adressleiste) oder
+im Standardbrowser. Alles außer den Terminal-Tabs funktioniert gleich (Formeln, Diagramme, Animationen, Anhänge,
+Lernzettel, Profile, Verlauf, lokale Modelle). Den Ordner wählst du beim Start (`richterm ~/Ordner`) oder über den
+Ordnerknopf (Pfad eingeben). Claude Code und Ollama gibt es für macOS; `./richterm` bietet die Installation an.
+Unter Linux erzwingt `richterm --web` den Browser-Modus ebenfalls (z. B. ohne GTK). Windows: ungetestet, der
+Browser-Modus sollte unter WSL laufen.
 
 ## Starten
 
