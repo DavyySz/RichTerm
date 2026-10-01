@@ -13,9 +13,23 @@
   let busy = false;
 
   // ---------- Kommunikation mit der App ----------
+  // Natives Fenster: WebKit-Nachrichtenkanal. Browser-Modus: HTTP (/cmd) hin, Server-Sent Events (/events) zurück.
+  const NATIVE = !!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.app);
   function send(obj) {
-    try { window.webkit.messageHandlers.app.postMessage(JSON.stringify(obj)); }
-    catch (e) { console.error('kein App-Kanal', e); }
+    if (NATIVE) {
+      try { window.webkit.messageHandlers.app.postMessage(JSON.stringify(obj)); } catch (e) { console.error('kein App-Kanal', e); }
+    } else {
+      fetch('/cmd', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(obj) })
+        .catch(() => setStatus('Verbindung zu RichTerm verloren. Bitte richterm neu starten.'));
+    }
+  }
+  function connectEvents(onReady) {
+    if (NATIVE) { onReady(); return; }
+    const es = new EventSource('/events');
+    let opened = false;
+    es.onopen = () => { if (!opened) { opened = true; onReady(); } };
+    es.onmessage = (e) => { try { window.chatEvent(JSON.parse(e.data)); } catch (err) { console.error(err); } };
+    es.onerror = () => setStatus('Verbindung unterbrochen … versuche erneut');
   }
 
   // ---------- Hilfen ----------
@@ -403,6 +417,11 @@
         setStatus(ev.note || '');
         break;
       case 'card': addCard(ev.msg); break;
+      case 'ask_folder': {
+        const p = window.prompt('Arbeitsordner (Pfad):', ev.current || '');
+        if (p) send({ cmd: 'set_folder', path: p });
+        break;
+      }
       case 'models': fillModels(ev.models || [], ev.current || 'claude:'); break;
       case 'user_sent': addUser(ev.text, ev.images); lastQuestion = ev.text; setBusy(true); setStatus('Die KI arbeitet …'); break;
       case 'status': setStatus(ev.text); break;
@@ -565,5 +584,5 @@
   });
   applyPrefs();
   input.focus();
-  send({ cmd: 'ready' });
+  connectEvents(() => send({ cmd: 'ready' }));
 })();

@@ -26,17 +26,29 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote, urlparse
 
-import gi
-gi.require_version('Gtk', '3.0')
-gi.require_version('Vte', '2.91')
-gi.require_version('WebKit2', '4.1')
-from gi.repository import Gtk, Gdk, GLib, Vte, Pango, WebKit2  # noqa: E402
+Gtk = Gdk = GLib = Vte = Pango = WebKit2 = None
+
+
+def load_gtk():
+    """GTK/VTE/WebKit nur im nativen Modus laden (im Browser-Modus nicht nötig, z.B. auf macOS)."""
+    global Gtk, Gdk, GLib, Vte, Pango, WebKit2
+    import gi
+    gi.require_version('Gtk', '3.0')
+    gi.require_version('Vte', '2.91')
+    gi.require_version('WebKit2', '4.1')
+    from gi.repository import Gtk as _Gtk, Gdk as _Gdk, GLib as _GLib, Vte as _Vte, Pango as _Pango, WebKit2 as _WebKit2
+    Gtk, Gdk, GLib, Vte, Pango, WebKit2 = _Gtk, _Gdk, _GLib, _Vte, _Pango, _WebKit2
+
+
+def _xdg(key, default):
+    v = os.environ.get(key)
+    return v if v else os.path.join(HOME, default)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 HOME = os.path.expanduser('~')
-CONFIG_PATH = os.path.join(GLib.get_user_config_dir(), 'richterm.json')
-PORT_FILE = os.path.join(GLib.get_user_runtime_dir(), 'richterm.port')
-HTML_DIR = os.path.join(GLib.get_user_cache_dir(), 'richterm', 'html')
+CONFIG_PATH = os.path.join(_xdg('XDG_CONFIG_HOME', '.config'), 'richterm.json')
+PORT_FILE = os.path.join(os.environ.get('XDG_RUNTIME_DIR') or _xdg('XDG_CACHE_HOME', '.cache'), 'richterm.port')
+HTML_DIR = os.path.join(_xdg('XDG_CACHE_HOME', '.cache'), 'richterm', 'html')
 
 DEFAULTS = {
     'font': 'DejaVu Sans Mono 11',
@@ -818,6 +830,8 @@ class Receiver(BaseHTTPRequestHandler):
         path = unquote(urlparse(self.path).path)
         if path == '/ping':
             return self._reply(200, {'ok': True, 'app': 'richterm'})
+        if path == '/events':                               # Browser-Modus: Ereignisstrom (Server-Sent Events)
+            return self._serve_events()
         if path.startswith('/file/'):
             return self._send_file('/' + path[len('/file/'):])
         if path.startswith('/html/'):
@@ -827,6 +841,32 @@ class Receiver(BaseHTTPRequestHandler):
             if full.startswith(HERE):
                 return self._send_file(full)
         self._reply(404, {'ok': False})
+
+    def _serve_events(self):
+        import queue
+        q = queue.Queue()
+        self.app.add_listener(q)
+        try:
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/event-stream')
+            self.send_header('Cache-Control', 'no-store')
+            self.send_header('Connection', 'keep-alive')
+            self.end_headers()
+            self.wfile.write(b': verbunden\n\n')
+            self.wfile.flush()
+            while True:
+                try:
+                    ev = q.get(timeout=15)
+                except queue.Empty:
+                    self.wfile.write(b': ping\n\n')
+                    self.wfile.flush()
+                    continue
+                self.wfile.write(('data: ' + json.dumps(ev) + '\n\n').encode('utf-8'))
+                self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            pass
+        finally:
+            self.app.remove_listener(q)
 
     @classmethod
     def store_html(cls, content):
@@ -842,13 +882,20 @@ class Receiver(BaseHTTPRequestHandler):
         raw = self.rfile.read(n).decode('utf-8', 'replace')
         if self.path == '/store':                       # HTML-Block aus dem Chat ablegen
             return self._reply(200, {'ok': True, 'url': self.store_html(raw)})
+        if self.path == '/cmd':                         # Browser-Modus: Befehle der Oberfläche
+            try:
+                data = json.loads(raw)
+            except ValueError:
+                return self._reply(400, {'ok': False})
+            self.app.ui(self.app.handle_command, data)
+            return self._reply(200, {'ok': True})
         if self.path == '/say':                         # Frage aus dem Terminal an den Chat (`rt ask …`)
             try:
                 text = json.loads(raw).get('text', '')
             except ValueError:
                 text = raw
-            GLib.idle_add(self.app.send_to_claude, text)
-            GLib.idle_add(self.app.show_chat)
+            self.app.ui(self.app.send_to_claude, text)
+            self.app.ui(self.app.show_chat)
             return self._reply(200, {'ok': True})
         if self.path != '/show':
             return self._reply(404, {'ok': False})
@@ -858,32 +905,31 @@ class Receiver(BaseHTTPRequestHandler):
             return self._reply(400, {'ok': False, 'error': 'kein gültiges JSON'})
         if msg.get('kind') == 'html' and not str(msg.get('content', '')).startswith(('file://', 'http')):
             msg['content'] = self.store_html(msg['content'])
-        GLib.idle_add(self.app.chat_event, {'type': 'card', 'msg': msg})
-        GLib.idle_add(self.app.show_chat)
+        self.app.ui(self.app.chat_event, {'type': 'card', 'msg': msg})
+        self.app.ui(self.app.show_chat)
         self._reply(200, {'ok': True})
 
 
 # ----------------------------------------------------------------------------
 # Hauptfenster
 # ----------------------------------------------------------------------------
-class RichTerm(Gtk.Window):
-    def __init__(self, start_dir=None):
-        super().__init__(title='RichTerm')
+class Core:
+    """Alles, was nicht an der Oberfläche hängt: Konfiguration, Profil, Verlauf, Sitzungen, Befehle, Server.
+    Die Oberfläche (GTK-Fenster oder Browser) liefert: ui(), chat_event(), show_chat(), choose_folder(),
+    open_uri(), set_clipboard(), edit_file()."""
+
+    def init_core(self, start_dir=None):
         self.cfg = load_config()
         if start_dir and os.path.isdir(start_dir):
             # Startordner aus der Kommandozeile (z.B. `richterm` im aktuellen Verzeichnis)
             self.cfg['cwd'] = os.path.abspath(start_dir)
             save_config(self.cfg)
         self.session = None
+        self.listeners = []
         self.profile, self.profile_body, self.profile_created = load_profile(self.cfg['cwd'])
         self.profile_loaded_at = self.profile_mtime()
         self.history = self.make_history()
         self.recorder = TurnRecorder()
-        self.set_default_size(*self.cfg['window'])
-        self.connect('destroy', self.on_quit)
-        self.connect('key-press-event', self.on_key)
-        self.connect('size-allocate', self.on_size)      # Fenstergröße laufend merken
-
         self.server = ThreadingHTTPServer(('127.0.0.1', 0), Receiver)
         Receiver.app = self
         self.port = self.server.server_address[1]
@@ -895,59 +941,68 @@ class RichTerm(Gtk.Window):
         except OSError:
             pass
 
-        self.notebook = Gtk.Notebook()
-        self.notebook.set_scrollable(True)
-        self.notebook.connect('page-removed', self.on_page_removed)
-        self.add(self.notebook)
+    def shutdown_core(self):
+        save_config(self.cfg)
+        self.end_session()
+        try:
+            os.remove(PORT_FILE)
+        except OSError:
+            pass
+        self.server.shutdown()
 
-        self.web = self.build_chat()
-        self.notebook.append_page(self.web, Gtk.Label(label='Chat'))
-        self.set_title('RichTerm — ' + self.cfg['cwd'].replace(HOME, '~'))
-        self.show_all()
+    # Browser-Modus: Ereignis-Abonnenten (SSE)
+    def add_listener(self, q):
+        self.listeners.append(q)
 
-    # --- Chat ----------------------------------------------------------------
-    def build_chat(self):
-        settings = WebKit2.Settings()
-        settings.set_enable_javascript(True)
-        settings.set_enable_developer_extras(True)
-        ucm = WebKit2.UserContentManager()
-        ucm.register_script_message_handler('app')
-        ucm.connect('script-message-received::app', self.on_js_message)
-        web = WebKit2.WebView(user_content_manager=ucm, settings=settings)
-        web.set_background_color(rgba(PALETTE['bg']))
-        web.connect('decide-policy', self.on_web_policy)
-        web.load_uri(self.base_url + '/chat/index.html')
-        return web
+    def remove_listener(self, q):
+        if q in self.listeners:
+            self.listeners.remove(q)
 
-    def on_web_policy(self, web, decision, dtype):
-        if dtype == WebKit2.PolicyDecisionType.NAVIGATION_ACTION:
-            uri = decision.get_navigation_action().get_request().get_uri()
-            if not uri.startswith(self.base_url):
-                Gtk.show_uri_on_window(self, uri, Gdk.CURRENT_TIME)
-                decision.ignore()
-                return True
+    def broadcast(self, ev):
+        for q in list(self.listeners):
+            q.put(ev)
+
+    # Von der Oberfläche zu liefern
+    def ui(self, fn, *args):
+        raise NotImplementedError
+
+    def chat_event(self, ev):
+        raise NotImplementedError
+
+    def show_chat(self):
         return False
 
+    def choose_folder(self):
+        pass
+
+    def open_uri(self, uri):
+        import webbrowser
+        webbrowser.open(uri)
+
+    def set_clipboard(self, text):
+        pass
+
+    def edit_file(self, path):
+        opener = 'open' if sys.platform == 'darwin' else 'xdg-open'
+        subprocess.Popen([opener, path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    def set_folder(self, path):
+        path = os.path.expanduser(path or '')
+        if not os.path.isdir(path):
+            self.chat_event({'type': 'error', 'text': 'Ordner nicht gefunden: ' + path})
+            return
+        self.cfg['cwd'] = os.path.abspath(path)
+        save_config(self.cfg)
+        self.reload_profile()
+        self.chat_event(self.ready_event('Ordner gewechselt: ' + self.cfg['cwd'] + ' · nächste Nachricht startet dort eine neue Sitzung', replay=True))
+
+    # --- Chat ----------------------------------------------------------------
     def refresh_models_async(self):
         """Lokale Modelle im Hintergrund abfragen (Ollama-Start kann Sekunden dauern) und nachreichen."""
         def work():
             models = self.model_choices()
-            GLib.idle_add(self.chat_event, {'type': 'models', 'models': models, 'current': self.current_choice()})
+            self.ui(self.chat_event, {'type': 'models', 'models': models, 'current': self.current_choice()})
         threading.Thread(target=work, daemon=True).start()
-
-    def chat_event(self, ev):
-        if ev.get('type') == 'ready':
-            self.refresh_models_async()
-        js = 'window.chatEvent(JSON.parse(%s));' % json.dumps(json.dumps(ev))
-        if hasattr(self.web, 'evaluate_javascript'):
-            self.web.evaluate_javascript(js, -1, None, None, None, None, None)
-        else:
-            self.web.run_javascript(js, None, None, None)
-        return False
-
-    def show_chat(self):
-        self.notebook.set_current_page(0)
-        return False
 
     def effective(self, key):
         """Profilwert vor UI-Einstellung."""
@@ -1017,7 +1072,7 @@ class RichTerm(Gtk.Window):
             return
 
         def run():
-            GLib.idle_add(self.chat_event, {'type': 'status', 'text': 'Lade Modell %s … (läuft im Hintergrund)' % name})
+            self.ui(self.chat_event, {'type': 'status', 'text': 'Lade Modell %s … (läuft im Hintergrund)' % name})
             p = subprocess.Popen([exe, 'pull', name], env=ollama_env(os.environ), stdout=subprocess.PIPE,
                                  stderr=subprocess.STDOUT, text=True)
             last = ''
@@ -1026,13 +1081,13 @@ class RichTerm(Gtk.Window):
                 m = re.search(r'(\d+)%', line)
                 if m and m.group(1) != last:
                     last = m.group(1)
-                    GLib.idle_add(self.chat_event, {'type': 'status', 'text': 'Lade Modell %s … %s %%' % (name, last)})
+                    self.ui(self.chat_event, {'type': 'status', 'text': 'Lade Modell %s … %s %%' % (name, last)})
             ok = p.wait() == 0
             if ok:
-                GLib.idle_add(self.choose_model, 'ollama:' + name)
-                GLib.idle_add(self.chat_event, {'type': 'status', 'text': 'Modell %s geladen und ausgewählt.' % name})
+                self.ui(self.choose_model, 'ollama:' + name)
+                self.ui(self.chat_event, {'type': 'status', 'text': 'Modell %s geladen und ausgewählt.' % name})
             else:
-                GLib.idle_add(self.chat_event, {'type': 'error', 'text': 'Modell %s konnte nicht geladen werden. Name prüfen (ollama.com/library).' % name})
+                self.ui(self.chat_event, {'type': 'error', 'text': 'Modell %s konnte nicht geladen werden. Name prüfen (ollama.com/library).' % name})
         threading.Thread(target=run, daemon=True).start()
 
     def profile_mtime(self):
@@ -1101,16 +1156,9 @@ class RichTerm(Gtk.Window):
         return self.chat_event({'type': 'claude', 'msg': m})
 
     def compact_history(self):
-        GLib.idle_add(self.chat_event, {'type': 'status', 'text': 'Verlauf wird verdichtet (Zusammenfassung in %s) …' % HISTORY_NAME})
+        self.ui(self.chat_event, {'type': 'status', 'text': 'Verlauf wird verdichtet (Zusammenfassung in %s) …' % HISTORY_NAME})
         ok = self.history.compact(self.summarizer())
-        GLib.idle_add(self.chat_event, {'type': 'status', 'text': 'Verlauf verdichtet.' if ok else 'Verlauf: Verdichten nicht möglich, Rohverlauf bleibt.'})
-
-    def on_js_message(self, ucm, result):
-        try:
-            data = json.loads(result.get_js_value().to_string())
-        except (ValueError, AttributeError):
-            return
-        self.handle_command(data)
+        self.ui(self.chat_event, {'type': 'status', 'text': 'Verlauf verdichtet.' if ok else 'Verlauf: Verdichten nicht möglich, Rohverlauf bleibt.'})
 
     def handle_command(self, data):
         cmd = data.get('cmd')
@@ -1147,7 +1195,7 @@ class RichTerm(Gtk.Window):
             path = os.path.join(self.cfg['cwd'], PROFILE_NAME)
             if not os.path.exists(path):
                 load_profile(self.cfg['cwd'])
-            Gtk.show_uri_on_window(self, 'file://' + path, Gdk.CURRENT_TIME)
+            self.edit_file(path)
         elif cmd == 'profile_reload':
             self.reload_profile()
             self.chat_event(self.ready_event('Profil neu geladen · gilt ab der nächsten Nachricht'))
@@ -1170,24 +1218,13 @@ class RichTerm(Gtk.Window):
                 fh.write(answer.rstrip() + '\n')
             self.chat_event({'type': 'status', 'text': 'Lernzettel gespeichert: ' + os.path.relpath(path, self.cfg['cwd'])})
         elif cmd == 'copy':
-            # Zwischenablage über GTK setzen (Rückfall, falls die Browser-Zwischenablage nicht erlaubt ist)
-            Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD).set_text(data.get('text', ''), -1)
+            self.set_clipboard(data.get('text', ''))      # Rückfall, falls die Browser-Zwischenablage nicht erlaubt ist
+        elif cmd == 'set_folder':
+            self.set_folder(data.get('path', ''))
         elif cmd == 'open':
             url = data.get('url', '')
             if url:
-                Gtk.show_uri_on_window(self, self.base_url + url if url.startswith('/') else url, Gdk.CURRENT_TIME)
-
-    def choose_folder(self):
-        dlg = Gtk.FileChooserDialog(title='Arbeitsordner für Claude wählen', parent=self,
-                                    action=Gtk.FileChooserAction.SELECT_FOLDER)
-        dlg.add_buttons('Abbrechen', Gtk.ResponseType.CANCEL, 'Auswählen', Gtk.ResponseType.OK)
-        dlg.set_current_folder(self.cfg['cwd'])
-        if dlg.run() == Gtk.ResponseType.OK:
-            self.cfg['cwd'] = dlg.get_filename()
-            save_config(self.cfg)
-            self.reload_profile()
-            self.chat_event(self.ready_event('Ordner gewechselt: ' + self.cfg['cwd'] + ' · nächste Nachricht startet dort eine neue Sitzung'))
-        dlg.destroy()
+                self.open_uri(self.base_url + url if url.startswith('/') else url)
 
     def store_attachments(self, attachments):
         """Anhänge (Bilder, PDFs, Dateien) im Arbeitsordner unter richterm-anhang/ ablegen.
@@ -1241,8 +1278,8 @@ class RichTerm(Gtk.Window):
             self.reload_profile()
             self.chat_event(self.ready_event('Profil wurde geändert und automatisch übernommen'))
         if self.session is None:
-            on_msg = lambda m: GLib.idle_add(self.on_claude_message, m)  # noqa: E731
-            on_exit = lambda code: GLib.idle_add(self.on_session_exit, code)  # noqa: E731
+            on_msg = lambda m: self.ui(self.on_claude_message, m)  # noqa: E731
+            on_exit = lambda code: self.ui(self.on_session_exit, code)  # noqa: E731
             prompt = build_system_prompt(self.profile, self.profile_body)
             resume = None if self.profile.get('backend', 'claude').lower() == 'command' else self.saved_session()
             memory = '' if resume else self.history.context_block()   # beim Fortsetzen kennt Claude den Verlauf schon
@@ -1286,6 +1323,95 @@ class RichTerm(Gtk.Window):
             s.close()
 
     # --- Terminal-Tabs -------------------------------------------------------
+    # --- Tasten --------------------------------------------------------------
+
+
+class NativeMixin(Core):
+    """Natives Fenster (Linux): GTK + WebKit-Chat + VTE-Terminals. Wird zur Laufzeit mit Gtk.Window verbunden."""
+
+    def __init__(self, start_dir=None):
+        Gtk.Window.__init__(self, title='RichTerm')
+        self.init_core(start_dir)
+        self.set_default_size(*self.cfg['window'])
+        self.connect('destroy', self.on_quit)
+        self.connect('key-press-event', self.on_key)
+        self.connect('size-allocate', self.on_size)      # Fenstergröße laufend merken
+
+        self.notebook = Gtk.Notebook()
+        self.notebook.set_scrollable(True)
+        self.notebook.connect('page-removed', self.on_page_removed)
+        self.add(self.notebook)
+
+        self.web = self.build_chat()
+        self.notebook.append_page(self.web, Gtk.Label(label='Chat'))
+        self.set_title('RichTerm — ' + self.cfg['cwd'].replace(HOME, '~'))
+        self.show_all()
+
+    def build_chat(self):
+        settings = WebKit2.Settings()
+        settings.set_enable_javascript(True)
+        settings.set_enable_developer_extras(True)
+        ucm = WebKit2.UserContentManager()
+        ucm.register_script_message_handler('app')
+        ucm.connect('script-message-received::app', self.on_js_message)
+        web = WebKit2.WebView(user_content_manager=ucm, settings=settings)
+        web.set_background_color(rgba(PALETTE['bg']))
+        web.connect('decide-policy', self.on_web_policy)
+        web.load_uri(self.base_url + '/chat/index.html')
+        return web
+
+    def on_web_policy(self, web, decision, dtype):
+        if dtype == WebKit2.PolicyDecisionType.NAVIGATION_ACTION:
+            uri = decision.get_navigation_action().get_request().get_uri()
+            if not uri.startswith(self.base_url):
+                Gtk.show_uri_on_window(self, uri, Gdk.CURRENT_TIME)
+                decision.ignore()
+                return True
+        return False
+
+    def ui(self, fn, *args):
+        GLib.idle_add(fn, *args)
+
+    def chat_event(self, ev):
+        if ev.get('type') == 'ready':
+            self.refresh_models_async()
+        js = 'window.chatEvent(JSON.parse(%s));' % json.dumps(json.dumps(ev))
+        if hasattr(self.web, 'evaluate_javascript'):
+            self.web.evaluate_javascript(js, -1, None, None, None, None, None)
+        else:
+            self.web.run_javascript(js, None, None, None)
+        return False
+
+    def show_chat(self):
+        self.notebook.set_current_page(0)
+        return False
+
+    def on_js_message(self, ucm, result):
+        try:
+            data = json.loads(result.get_js_value().to_string())
+        except (ValueError, AttributeError):
+            return
+        self.handle_command(data)
+
+    def choose_folder(self):
+        dlg = Gtk.FileChooserDialog(title='Arbeitsordner für Claude wählen', parent=self,
+                                    action=Gtk.FileChooserAction.SELECT_FOLDER)
+        dlg.add_buttons('Abbrechen', Gtk.ResponseType.CANCEL, 'Auswählen', Gtk.ResponseType.OK)
+        dlg.set_current_folder(self.cfg['cwd'])
+        chosen = dlg.get_filename() if dlg.run() == Gtk.ResponseType.OK else None
+        dlg.destroy()
+        if chosen:
+            self.set_folder(chosen)
+
+    def open_uri(self, uri):
+        Gtk.show_uri_on_window(self, uri, Gdk.CURRENT_TIME)
+
+    def set_clipboard(self, text):
+        Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD).set_text(text, -1)
+
+    def edit_file(self, path):
+        Gtk.show_uri_on_window(self, 'file://' + path, Gdk.CURRENT_TIME)
+
     def new_terminal(self, cwd=None):
         term = Vte.Terminal()
         term.set_font(Pango.FontDescription(self.cfg['font']))
@@ -1365,7 +1491,6 @@ class RichTerm(Gtk.Window):
                 t.set_font(fd)
         self.cfg['font'] = fd.to_string()
 
-    # --- Tasten --------------------------------------------------------------
     def on_key(self, widget, event):
         ctrl = event.state & Gdk.ModifierType.CONTROL_MASK
         shift = event.state & Gdk.ModifierType.SHIFT_MASK
@@ -1415,23 +1540,107 @@ class RichTerm(Gtk.Window):
             self.cfg['window'] = [w, h]
 
     def on_quit(self, *a):
-        save_config(self.cfg)
-        self.end_session()
-        try:
-            os.remove(PORT_FILE)
-        except OSError:
-            pass
-        self.server.shutdown()
+        self.shutdown_core()
         Gtk.main_quit()
+
+
+class WebApp(Core):
+    """Browser-Modus (macOS, Windows, Linux ohne GTK): der Chat läuft im Browser, Python liefert ihn aus."""
+
+    def __init__(self, start_dir=None):
+        self.lock = threading.RLock()
+        self.ever_connected = False
+        self.init_core(start_dir)
+
+    def ui(self, fn, *args):
+        with self.lock:
+            fn(*args)
+
+    def chat_event(self, ev):
+        if ev.get('type') == 'ready':
+            self.refresh_models_async()
+        self.broadcast(ev)
+        return False
+
+    def choose_folder(self):
+        self.chat_event({'type': 'ask_folder', 'current': self.cfg['cwd']})
+
+    def add_listener(self, q):
+        self.ever_connected = True
+        Core.add_listener(self, q)
+
+    def run(self, open_browser=True):
+        url = self.base_url + '/chat/index.html'
+        print('RichTerm (Browser-Modus): ' + url, flush=True)
+        print('Ordner: ' + self.cfg['cwd'] + '   ·   Beenden mit Strg+C oder durch Schließen des Browserfensters', flush=True)
+        if open_browser:
+            self.open_app_window(url)
+        import time
+        idle = 0
+        try:
+            while True:
+                time.sleep(2)
+                if self.ever_connected and not self.listeners:
+                    idle += 2
+                    if idle >= 90:                          # Browserfenster seit 90 s zu: beenden
+                        break
+                else:
+                    idle = 0
+        except KeyboardInterrupt:
+            pass
+        self.shutdown_core()
+
+    @staticmethod
+    def open_app_window(url):
+        """Chat als eigenes Fenster ohne Adressleiste öffnen (Chrome/Chromium/Edge), sonst Standardbrowser."""
+        import webbrowser
+        candidates = []
+        if sys.platform == 'darwin':
+            for app in ('Google Chrome', 'Chromium', 'Microsoft Edge', 'Brave Browser'):
+                p = '/Applications/%s.app/Contents/MacOS/%s' % (app, app)
+                if os.path.exists(p):
+                    candidates.append([p])
+        else:
+            for exe in ('google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser', 'microsoft-edge', 'brave-browser'):
+                if shutil.which(exe):
+                    candidates.append([shutil.which(exe)])
+        for c in candidates:
+            try:
+                subprocess.Popen(c + ['--app=' + url, '--window-size=1400,900'],
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+                return
+            except OSError:
+                continue
+        webbrowser.open(url)
+
+
+def gtk_available():
+    try:
+        import gi
+        gi.require_version('Gtk', '3.0')
+        gi.require_version('Vte', '2.91')
+        gi.require_version('WebKit2', '4.1')
+        from gi.repository import Gtk, Vte, WebKit2  # noqa: F401
+        return True
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith('-')]
     if '-h' in sys.argv or '--help' in sys.argv:
         print(__doc__)
-        print('Aufruf: richterm [ORDNER]   — startet RichTerm mit ORDNER als Arbeitsordner (Standard: aktueller Ordner)')
+        print('Aufruf: richterm [--web] [ORDNER]   — startet RichTerm mit ORDNER als Arbeitsordner (Standard: aktueller Ordner)')
+        print('  --web   Browser-Modus (macOS/Windows oder Linux ohne GTK): Chat im Browser statt im eigenen Fenster')
         return 0
-    app = RichTerm(args[0] if args else None)
+    start_dir = args[0] if args else None
+    web = '--web' in sys.argv or sys.platform != 'linux' or not gtk_available()
+    if web:
+        WebApp(start_dir).run(open_browser='--no-browser' not in sys.argv)
+        return 0
+    load_gtk()
+    RichTermWindow = type('RichTerm', (NativeMixin, Gtk.Window), {})
+    app = RichTermWindow(start_dir)
     try:
         Gtk.main()
     except KeyboardInterrupt:
