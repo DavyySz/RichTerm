@@ -153,7 +153,7 @@ class ClaudeSession:
     name = 'Claude Code'
 
     def __init__(self, cwd, model, perm, port, on_message, on_exit, system_prompt=SYSTEM_NOTE,
-                 allowed_tools=(), disallowed_tools=()):
+                 allowed_tools=(), disallowed_tools=(), resume=None):
         self.on_message = on_message
         self.on_exit = on_exit
         self.proc = None
@@ -173,6 +173,9 @@ class ClaudeSession:
             cmd += ['--allowedTools'] + list(allowed_tools)
         if disallowed_tools:
             cmd += ['--disallowedTools'] + list(disallowed_tools)
+        if resume:
+            cmd += ['--resume', resume]
+        self.cmd = cmd
         env = dict(os.environ)
         env['RICHTERM'] = '1'
         env['RT_PORT'] = str(port)
@@ -241,17 +244,36 @@ class ClaudeSession:
 # stdin und antwortet auf stdout. Die Ausgabe wird in dasselbe Ereignisformat
 # übersetzt, das die Oberfläche von Claude Code kennt.
 # ----------------------------------------------------------------------------
-OLLAMA_LOCAL = os.path.join(HOME, '.local', 'share', 'ollama', 'dist', 'bin', 'ollama')
+# Eigenes Ollama unter ~/.local (ohne sudo installiert), auf eigenem Port, damit es einem
+# evtl. vorhandenen (älteren) Systemdienst auf 11434 nicht in die Quere kommt.
+OLLAMA_DIR = os.path.join(HOME, '.local', 'share', 'ollama')
+OLLAMA_LOCAL = os.path.join(OLLAMA_DIR, 'dist', 'bin', 'ollama')
+OLLAMA_HOST = '127.0.0.1:11435'
+OLLAMA_MODELS = os.path.join(OLLAMA_DIR, 'models')
 
 
 def find_ollama():
-    return shutil.which('ollama') or (OLLAMA_LOCAL if os.path.exists(OLLAMA_LOCAL) else None)
+    if os.path.exists(OLLAMA_LOCAL):
+        return OLLAMA_LOCAL
+    return shutil.which('ollama')
+
+
+def ollama_env(env):
+    """Umgebung für Client und Server des eigenen Ollama."""
+    env = dict(env)
+    if find_ollama() == OLLAMA_LOCAL:
+        env['OLLAMA_HOST'] = OLLAMA_HOST
+        env['OLLAMA_MODELS'] = OLLAMA_MODELS
+        env['PATH'] = os.path.dirname(OLLAMA_LOCAL) + os.pathsep + env.get('PATH', '')
+    return env
 
 
 def ensure_ollama_running(timeout=30):
     """Startet `ollama serve` im Hintergrund, falls der Dienst nicht erreichbar ist."""
     import urllib.request
-    url = 'http://127.0.0.1:11434/api/version'
+    exe = find_ollama()
+    host = OLLAMA_HOST if exe == OLLAMA_LOCAL else os.environ.get('OLLAMA_HOST', '127.0.0.1:11434')
+    url = 'http://%s/api/version' % host
 
     def alive():
         try:
@@ -261,13 +283,12 @@ def ensure_ollama_running(timeout=30):
             return False
     if alive():
         return True
-    exe = find_ollama()
     if not exe:
         return False
-    env = dict(os.environ)
-    env['PATH'] = os.path.dirname(exe) + os.pathsep + env.get('PATH', '')
-    subprocess.Popen([exe, 'serve'], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                     stdin=subprocess.DEVNULL, start_new_session=True)
+    env = ollama_env(os.environ)
+    os.makedirs(OLLAMA_MODELS, exist_ok=True)
+    log = open(os.path.join(OLLAMA_DIR, 'serve.log'), 'a')
+    subprocess.Popen([exe, 'serve'], env=env, stdout=log, stderr=log, stdin=subprocess.DEVNULL, start_new_session=True)
     import time
     for _ in range(timeout * 2):
         if alive():
@@ -309,7 +330,7 @@ class CommandSession:
             exe = find_ollama()
             if exe:
                 argv[0] = exe
-                env['PATH'] = os.path.dirname(exe) + os.pathsep + env.get('PATH', '')
+                env = ollama_env(env)
             self.on_message({'type': 'system', 'subtype': 'status', 'status': 'ollama'})
             if not ensure_ollama_running():
                 self.on_message({'type': 'result', 'is_error': True,
@@ -439,6 +460,26 @@ class History:
             fh.write(text)
         os.replace(tmp, self.path)
 
+    def ensure_file(self):
+        """Legt die Verlaufsdatei an, falls sie fehlt (beim Start, nicht erst bei der ersten Antwort)."""
+        if self.enabled and not os.path.exists(self.path):
+            try:
+                with open(self.path, 'w', encoding='utf-8') as fh:
+                    fh.write(HISTORY_HEAD)
+            except OSError:
+                pass
+
+    def recent_turns(self, limit=8):
+        """Die letzten Einträge als Liste von (rolle, zeit, text) für die Anzeige beim Start."""
+        _, raw = self._split(self._read())
+        turns = []
+        for block in raw.split('\n### ')[1:]:
+            head, _, body = block.partition('\n')
+            stamp, _, who = head.partition(' · ')
+            role = 'user' if who.startswith('Nutzer') else 'assistant'
+            turns.append((role, stamp, body.strip()))
+        return turns[-limit:]
+
     # --- Anhängen -----------------------------------------------------------
     def append_turn(self, user_text, assistant_text, tools, backend_label):
         if not self.enabled or not user_text.strip():
@@ -534,6 +575,14 @@ class TurnRecorder:
         return ''.join(self.parts).strip()
 
 
+def claude_session_exists(cwd, session_id):
+    """Claude Code legt Sitzungen unter ~/.claude/projects/<pfad mit - statt />/<id>.jsonl ab."""
+    if not session_id:
+        return False
+    folder = os.path.join(HOME, '.claude', 'projects', cwd.replace('/', '-'))
+    return os.path.exists(os.path.join(folder, session_id + '.jsonl'))
+
+
 def summarize_with_claude(prompt):
     exe = shutil.which('claude')
     if not exe:
@@ -550,11 +599,13 @@ def summarize_with_claude(prompt):
 def summarize_with_command(command):
     def run(prompt):
         argv = shlex.split(command)
+        env = dict(os.environ)
         if argv and os.path.basename(argv[0]) == 'ollama' and find_ollama():
             argv[0] = find_ollama()
+            env = ollama_env(env)
             ensure_ollama_running()
         try:
-            r = subprocess.run(argv, input=prompt, capture_output=True, text=True, timeout=600)
+            r = subprocess.run(argv, input=prompt, capture_output=True, text=True, timeout=600, env=env)
             return r.stdout.strip() if r.returncode == 0 else ''
         except (OSError, subprocess.SubprocessError, ValueError):
             return ''
@@ -720,14 +771,25 @@ class RichTerm(Gtk.Window):
         """Profilwert vor UI-Einstellung."""
         return self.profile.get(key) or self.cfg.get(key, '')
 
-    def ready_event(self, note):
+    def profile_perm(self):
+        """Berechtigungsmodus aus dem Profil; 'default' oder leer heißt: die Kopfzeile entscheidet."""
+        p = (self.profile.get('permissions') or '').strip()
+        return p if p and p != 'default' else ''
+
+    def effective_perm(self):
+        return self.profile_perm() or self.cfg.get('perm', 'default')
+
+    def ready_event(self, note, replay=False):
+        if self.saved_session() and self.profile.get('backend', 'claude').lower() != 'command':
+            note = 'Letzte Claude-Sitzung wird fortgesetzt · ' + note
         if self.profile_created:
             note = 'Profil angelegt: %s – bitte ausfüllen (Knopf „Profil“), dann „Neu laden“. ' % PROFILE_NAME + note
         return {'type': 'ready', 'cwd': self.cfg['cwd'], 'home': HOME, 'user': os.path.basename(HOME),
-                'model': self.effective('model'), 'perm': self.profile.get('permissions') or self.cfg['perm'],
+                'model': self.effective('model'), 'perm': self.effective_perm(),
                 'backend': self.profile.get('backend', 'claude'),
-                'locked': {'model': bool(self.profile.get('model')), 'perm': bool(self.profile.get('permissions'))},
+                'locked': {'model': bool(self.profile.get('model')), 'perm': bool(self.profile_perm())},
                 'profile': PROFILE_NAME if os.path.exists(os.path.join(self.cfg['cwd'], PROFILE_NAME)) else '',
+                'replay': [{'role': r, 'time': t, 'text': x} for r, t, x in self.history.recent_turns()] if replay else [],
                 'note': note}
 
     def reload_profile(self):
@@ -741,7 +803,22 @@ class RichTerm(Gtk.Window):
             budget = int(self.profile.get('context_chars') or 20000)
         except ValueError:
             budget = 20000
-        return History(self.cfg['cwd'], enabled, budget)
+        h = History(self.cfg['cwd'], enabled, budget)
+        h.ensure_file()
+        return h
+
+    def saved_session(self):
+        """Letzte Claude-Sitzung dieses Ordners, falls sie noch existiert."""
+        sid = (self.cfg.get('sessions') or {}).get(self.cfg['cwd'])
+        return sid if claude_session_exists(self.cfg['cwd'], sid) else None
+
+    def remember_session(self, sid):
+        self.cfg.setdefault('sessions', {})[self.cfg['cwd']] = sid
+        save_config(self.cfg)
+
+    def forget_session(self):
+        if (self.cfg.get('sessions') or {}).pop(self.cfg['cwd'], None) is not None:
+            save_config(self.cfg)
 
     def backend_label(self):
         if self.profile.get('backend', 'claude').lower() == 'command':
@@ -756,6 +833,8 @@ class RichTerm(Gtk.Window):
     def on_claude_message(self, m):
         """Jedes Ereignis der Sitzung: an die Oberfläche weiterreichen und für den Verlauf mitschreiben."""
         self.recorder.feed(m)
+        if m.get('type') == 'system' and m.get('subtype') == 'init' and m.get('session_id'):
+            self.remember_session(m['session_id'])
         if m.get('type') == 'result':
             user, text, tools = self.recorder.user, self.recorder.text(), list(self.recorder.tools)
             self.recorder.reset()
@@ -775,9 +854,12 @@ class RichTerm(Gtk.Window):
             data = json.loads(result.get_js_value().to_string())
         except (ValueError, AttributeError):
             return
+        self.handle_command(data)
+
+    def handle_command(self, data):
         cmd = data.get('cmd')
         if cmd == 'ready':
-            self.chat_event(self.ready_event('Bereit · Ordner: ' + self.cfg['cwd']))
+            self.chat_event(self.ready_event('Bereit · Ordner: ' + self.cfg['cwd'], replay=True))
         elif cmd == 'send':
             self.send_to_claude(data.get('text', ''))
         elif cmd == 'permission':
@@ -788,7 +870,8 @@ class RichTerm(Gtk.Window):
                 self.session.interrupt()
         elif cmd == 'new':
             self.end_session()
-            self.chat_event({'type': 'status', 'text': 'Neuer Chat · Ordner: ' + self.cfg['cwd']})
+            self.forget_session()
+            self.chat_event({'type': 'status', 'text': 'Neuer Chat (ohne Fortsetzung der alten Claude-Sitzung) · Ordner: ' + self.cfg['cwd']})
         elif cmd == 'set':
             key, value = data.get('key'), data.get('value', '')
             if key in ('model', 'perm'):
@@ -830,7 +913,8 @@ class RichTerm(Gtk.Window):
             on_msg = lambda m: GLib.idle_add(self.on_claude_message, m)  # noqa: E731
             on_exit = lambda code: GLib.idle_add(self.on_session_exit, code)  # noqa: E731
             prompt = build_system_prompt(self.profile, self.profile_body)
-            memory = self.history.context_block()
+            resume = None if self.profile.get('backend', 'claude').lower() == 'command' else self.saved_session()
+            memory = '' if resume else self.history.context_block()   # beim Fortsetzen kennt Claude den Verlauf schon
             if memory:
                 prompt += '\n\n' + memory
             try:
@@ -839,10 +923,11 @@ class RichTerm(Gtk.Window):
                                                   self.effective('model'), prompt, on_msg, on_exit)
                 else:
                     self.session = ClaudeSession(self.cfg['cwd'], self.effective('model'),
-                                                 self.profile.get('permissions') or self.cfg['perm'], self.port,
+                                                 self.effective_perm(), self.port,
                                                  on_msg, on_exit, system_prompt=prompt,
                                                  allowed_tools=split_tools(self.profile.get('allowed_tools')),
-                                                 disallowed_tools=split_tools(self.profile.get('disallowed_tools')))
+                                                 disallowed_tools=split_tools(self.profile.get('disallowed_tools')),
+                                                 resume=resume)
             except Exception as e:  # noqa: BLE001
                 self.chat_event({'type': 'error', 'text': str(e)})
                 return

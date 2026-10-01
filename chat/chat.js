@@ -250,6 +250,19 @@
         $('model').title = $('model').disabled ? 'im Profil (richterm.md) festgelegt' : 'Modell';
         $('perm').title = $('perm').disabled ? 'im Profil (richterm.md) festgelegt' : 'Berechtigungen';
         $('btn-profile').textContent = ev.profile ? 'Profil' : 'Profil anlegen';
+        if (ev.replay && ev.replay.length && !messages.querySelector('.msg')) {
+          // letzte Einträge aus richterm-verlauf.md zur Orientierung anzeigen
+          const sep = document.createElement('div'); sep.className = 'replay-sep';
+          sep.textContent = 'Aus dem Verlauf (richterm-verlauf.md)';
+          $('welcome').hidden = true; messages.appendChild(sep);
+          for (const t of ev.replay) {
+            const m = addMessage(t.role); m.el.classList.add('replay');
+            if (t.role === 'user') m.bubble.textContent = t.text; else renderMarkdown(t.text, m.bubble);
+          }
+          const sep2 = document.createElement('div'); sep2.className = 'replay-sep'; sep2.textContent = 'Jetzt';
+          messages.appendChild(sep2);
+          scrollDown(true);
+        }
         $('btn-profile').title = 'richterm.md in ' + ev.cwd.replace(ev.home, '~') + (ev.backend === 'command' ? ' · Backend: Kommandozeile' : ' · Backend: Claude Code');
         setStatus(ev.note || '');
         break;

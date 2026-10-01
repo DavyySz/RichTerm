@@ -67,8 +67,9 @@ z. B. die Zusammenfassung kürzen oder Wichtiges ergänzen. `history: false` im 
 
 ## Lokale KI mit Ollama
 
-Ollama liegt ohne Installation unter `~/.local/share/ollama/dist/bin` (RichTerm startet den Dienst
-bei Bedarf selbst). Im Profil:
+Ollama liegt ohne Installation unter `~/.local/share/ollama/dist/bin`. RichTerm startet den Dienst bei
+Bedarf selbst, auf Port 11435 mit Modellen unter `~/.local/share/ollama/models`, damit er einem evtl.
+vorhandenen (älteren) System-Ollama auf 11434 nicht in die Quere kommt. Im Profil:
 
 ```yaml
 backend: command
@@ -79,6 +80,15 @@ context_chars: 6000          # kleine Modelle vertragen weniger Kontext
 
 Neue Modelle laden: `ollama pull qwen2.5:7b` (im RichTerm-Terminal, dort ist `ollama` im PATH).
 Lokale Modelle haben keine Dateiwerkzeuge; den Ordner lesen kann nur das Claude-Backend.
+
+## Sitzungen: zwei Ebenen
+
+1. **Claude-Code-Sitzung.** Claude Code speichert jedes Gespräch selbst (unter `~/.claude/projects/…`).
+   RichTerm merkt sich pro Ordner die letzte Sitzung und **setzt sie beim nächsten Start automatisch fort**,
+   mit allem, was Claude gelesen und getan hat. **Neuer Chat** beendet das und beginnt frisch.
+2. **`richterm-verlauf.md`** im Ordner: das modellunabhängige Gedächtnis (siehe oben). Es wird beim Start
+   angelegt, bei jeder Antwort ergänzt und beim Start zur Orientierung im Chat angezeigt. Nur darüber
+   kennt ein anderes Modell (Sonnet statt Haiku, ein lokales Modell) den bisherigen Kontext.
 
 ## Chat
 
