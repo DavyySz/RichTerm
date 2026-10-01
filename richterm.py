@@ -755,7 +755,7 @@ class Rag:
         out = []
         for root, _dirs, names in os.walk(self.dir):
             for n in names:
-                if n.startswith('.'):
+                if n.startswith('.') or n == 'LIES-MICH.txt':
                     continue
                 if os.path.splitext(n)[1].lower() in RAG_EXTS:
                     out.append(os.path.join(root, n))
@@ -1464,6 +1464,17 @@ class Core:
             k = 6
         strict = str(self.profile.get('rag_strict', 'false')).lower() in ('true', 'yes', 'ja', '1', 'on')
         rag = Rag(self.cfg['cwd'], self.profile.get('rag_dir') or RAG_DIRNAME, k, strict) if enabled else None
+        if rag and not rag.exists():
+            # Ordner beim Start mit anlegen (wie richterm.md und richterm-verlauf.md), mit kurzer Erklärung
+            try:
+                os.makedirs(rag.dir, exist_ok=True)
+                with open(os.path.join(rag.dir, 'LIES-MICH.txt'), 'w', encoding='utf-8') as fh:
+                    fh.write('Unterlagen für RichTerm.\n\nLege hier Vorlesungsfolien, Skripte, Übungen und Notizen ab '
+                             '(PDF, Markdown, Text, DOCX, HTML, Code). RichTerm indexiert sie automatisch und gibt der KI '
+                             'zu jeder Frage die passenden Abschnitte mit Quellenangabe mit. Wie streng die KI sich daran '
+                             'hält, stellst du im Chat oben im Menü „Unterlagen“ ein. Diese Datei kannst du löschen.\n')
+            except OSError:
+                pass
         if rag and rag.exists():
             threading.Thread(target=self.rag_refresh, args=(rag,), daemon=True).start()
         return rag

@@ -82,7 +82,7 @@ es jedes Mal erklären musst.
 
 ## Unterlagen: der Ordner `rag/`
 
-Lege Vorlesungsfolien, Skripte, Übungen oder Notizen in **`rag/`** im Arbeitsordner (PDF, Markdown, Text,
+Beim ersten Start wird **`rag/`** im Arbeitsordner angelegt. Lege Vorlesungsfolien, Skripte, Übungen oder Notizen hinein (PDF, Markdown, Text,
 DOCX, HTML, Code). RichTerm zerlegt sie in Abschnitte (PDFs seitenweise) und gibt der KI zu jeder Frage die
 passendsten Abschnitte mit Quellenangabe mit; die Antwort zitiert dann „laut vorlesung_03.pdf S. 4“. Unter
 deiner Frage steht, welche Unterlagen verwendet wurden. Das funktioniert mit jedem Modell, auch lokal, und

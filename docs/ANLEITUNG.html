@@ -76,7 +76,7 @@ richterm                        # RichTerm öffnet sich mit diesem Ordner</code>
   <li><b>Dateimanager (Nemo):</b> Rechtsklick auf einen Ordner oder in einen Ordner hinein, <b>„RichTerm hier öffnen“</b>.</li>
   <li><b>Desktop-Icon / Anwendungsmenü:</b> startet im Home-Ordner; den Ordner wechselst du danach über den Ordnerknopf oben links.</li>
 </ul>
-<div class="box"><b>Beim ersten Start in einem Ordner</b> werden <code>richterm.md</code> und <code>richterm-verlauf.md</code> angelegt. Die Statuszeile unter dem Eingabefeld weist darauf hin. Fülle das Profil aus (Abschnitt 4), bevor du ernsthaft arbeitest.</div>
+<div class="box"><b>Beim ersten Start in einem Ordner</b> werden <code>richterm.md</code>, <code>richterm-verlauf.md</code> und der Unterlagen-Ordner <code>rag/</code> angelegt. Die Statuszeile unter dem Eingabefeld weist darauf hin. Fülle das Profil aus (Abschnitt 4), bevor du ernsthaft arbeitest.</div>
 
 <h2>3. Die Oberfläche</h2>
 <table>
@@ -161,7 +161,7 @@ richterm                        # RichTerm öffnet sich mit diesem Ordner</code>
 <div class="box"><b>Hintergrund (musst du nicht wissen):</b> Lokale Modelle werden über die Ollama-API angesprochen (Streaming, Gesprächsverlauf innerhalb der Sitzung). Bildfähige lokale Modelle (z. B. <code>llava</code>, <code>qwen2.5vl</code>) bekommen angehängte Bilder ebenfalls. RichTerm bringt ein eigenes Ollama mit (unter <code>~/.local/share/ollama</code>, Port 11435) und startet es bei Bedarf selbst. Im RichTerm-Terminal geht auch die Kommandozeile: <code>ollama list</code>, <code>ollama pull name</code>, <code>ollama rm name</code>. Andere KIs mit Kommandozeile lassen sich im Profil über <code>backend: command</code> und <code>command: …</code> anbinden.</div>
 
 <h2 class="page">6. Unterlagen: der Ordner rag/</h2>
-<p>Das ist die wichtigste Funktion fürs Lernen mit Vorlesungsfolien. Lege im Arbeitsordner einen Ordner <code>rag/</code> an und kopiere alles hinein, womit die KI arbeiten soll: Folien und Skripte als PDF, Übungsblätter, eigene Notizen (Markdown oder Text), auch DOCX, HTML und Code.</p>
+<p>Das ist die wichtigste Funktion fürs Lernen mit Vorlesungsfolien. Der Ordner <code>rag/</code> wird beim ersten Start automatisch angelegt (mit einer kurzen LIES-MICH.txt). Kopiere alles hinein, womit die KI arbeiten soll: Folien und Skripte als PDF, Übungsblätter, eigene Notizen (Markdown oder Text), auch DOCX, HTML und Code.</p>
 <ul>
   <li>RichTerm zerlegt die Dateien automatisch in Abschnitte (PDFs <b>seitenweise</b>) und legt einen Index an (<code>rag/.richterm-index.json</code>). Neue oder geänderte Dateien werden beim nächsten Start oder bei der nächsten Frage erkannt.</li>
   <li>Zu jeder Frage sucht RichTerm die passendsten Abschnitte heraus und gibt sie der KI mit, zusammen mit der Anweisung, sich darauf zu stützen und die <b>Quelle zu nennen</b> (Datei und Seite). Die Antwort sagt dann z.&nbsp;B. „laut vorlesung_03.pdf S. 4“.</li>
