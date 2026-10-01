@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>RichTerm Anzeige</title>
+<link rel="stylesheet" href="../vendor/katex/katex.min.css">
+<link rel="stylesheet" href="panel.css">
+<script src="../vendor/katex/katex.min.js"></script>
+<script src="../vendor/katex/contrib/auto-render.min.js"></script>
+<script src="../vendor/marked/marked.min.js"></script>
+<script src="../vendor/mermaid/mermaid.min.js"></script>
+</head>
+<body>
+<header id="bar">
+  <span class="title">Anzeige</span>
+  <span class="spacer"></span>
+  <button id="btn-smaller" title="Schrift kleiner (Ctrl -)">A−</button>
+  <button id="btn-bigger" title="Schrift größer (Ctrl +)">A+</button>
+  <button id="btn-theme" title="Hell/Dunkel">☾</button>
+  <button id="btn-clear" title="Alles löschen">Leeren</button>
+</header>
+<main id="feed">
+  <div class="empty" id="empty">
+    <p>Hier erscheinen Formeln, Bilder, Diagramme und Dokumente.</p>
+    <p class="hint">Im Terminal z.&nbsp;B. <code>rt latex '\frac{1}{1+e^{-z}}'</code> oder <code>rt image bild.png</code> eingeben. <code>rt --help</code> zeigt alles.</p>
+  </div>
+</main>
+<script src="panel.js"></script>
+</body>
+</html>

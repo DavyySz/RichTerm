@@ -1,0 +1,118 @@
+#!/usr/bin/env python3
+r"""
+rt — Inhalte in die RichTerm-Anzeige schicken.
+
+  rt latex '\frac{1}{1+e^{-z}}'       Formel (mehrere durch Leerzeilen trennen)
+  rt latex -f formeln.tex             Formeln aus Datei
+  rt md datei.md                      Markdown-Datei (mit $…$-Formeln, Mermaid-Blöcken)
+  rt md -t '# Titel\n\nText mit $x^2$' Markdown-Text direkt
+  rt image bild.png                   Bild (PNG, JPG, SVG, GIF — GIFs animieren)
+  rt video clip.mp4                   Video (mp4/webm), läuft in Schleife
+  rt html seite.html                  HTML-Seite (eigene Skripte, Animationen, Canvas)
+  rt html -t '<canvas …>'             HTML-Text direkt
+  rt url https://…                    Webseite einbetten
+  rt mermaid 'graph LR; A-->B'        Diagramm
+  rt text 'irgendwas'                 Klartext
+  rt clear                            Anzeige leeren
+
+  Optionen:  --title 'Überschrift'   --height 600 (für html/url)   --quiet (Anzeige nicht aufklappen)
+  Ohne Argument wird von stdin gelesen:  echo '\sum_i x_i' | rt latex
+"""
+import json
+import os
+import sys
+import urllib.request
+
+
+def fail(msg):
+    print('rt: ' + msg, file=sys.stderr)
+    sys.exit(1)
+
+
+def main(argv):
+    args = argv[1:]
+    if not args or args[0] in ('-h', '--help'):
+        print(__doc__)
+        return 0
+    port = os.environ.get('RT_PORT')
+    if not port:
+        # Fallback: Port-Datei der laufenden RichTerm-Instanz (funktioniert aus jedem Terminal)
+        pf = os.path.join(os.environ.get('XDG_RUNTIME_DIR', '/tmp'), 'richterm.port')
+        try:
+            with open(pf, encoding='utf-8') as fh:
+                port = fh.read().strip()
+        except OSError:
+            fail('RichTerm läuft nicht (RT_PORT nicht gesetzt und keine Port-Datei gefunden)')
+
+    kind = args.pop(0)
+    title, height, quiet, from_file, as_text = '', None, False, None, False
+    rest = []
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == '--title':
+            i += 1; title = args[i]
+        elif a == '--height':
+            i += 1; height = int(args[i])
+        elif a == '--quiet':
+            quiet = True
+        elif a == '-f':
+            i += 1; from_file = args[i]
+        elif a == '-t':
+            as_text = True
+        else:
+            rest.append(a)
+        i += 1
+
+    if kind == 'clear':
+        content = ''
+    elif kind in ('image', 'video'):
+        if not rest:
+            fail('Dateipfad fehlt')
+        p = rest[0]
+        if p.startswith(('http://', 'https://', 'data:')):
+            content = p
+        else:
+            p = os.path.abspath(p)
+            if not os.path.exists(p):
+                fail('Datei nicht gefunden: ' + p)
+            content = 'file://' + p
+        title = title or os.path.basename(p)
+    elif kind == 'url':
+        content = rest[0] if rest else fail('URL fehlt')
+    else:
+        # latex, md, html, mermaid, text: Text aus Datei, Argument oder stdin
+        if from_file:
+            with open(from_file, encoding='utf-8') as fh:
+                content = fh.read()
+            title = title or os.path.basename(from_file)
+        elif rest and kind in ('md', 'html') and not as_text and len(rest) == 1 and os.path.isfile(rest[0]):
+            if kind == 'html':
+                content = 'file://' + os.path.abspath(rest[0])     # Datei direkt laden (relative Pfade bleiben gültig)
+            else:
+                with open(rest[0], encoding='utf-8') as fh:
+                    content = fh.read()
+            title = title or os.path.basename(rest[0])
+        elif rest:
+            content = ' '.join(rest)
+        else:
+            content = sys.stdin.read()
+        if as_text:
+            content = content.replace('\\n', '\n')
+
+    msg = {'kind': kind, 'content': content, 'title': title, 'show': not quiet}
+    if height:
+        msg['height'] = height
+    data = json.dumps(msg).encode('utf-8')
+    req = urllib.request.Request('http://127.0.0.1:%s/show' % port, data=data,
+                                 headers={'Content-Type': 'application/json'})
+    try:
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            ok = json.load(resp).get('ok')
+    except Exception as e:  # noqa: BLE001
+        fail('RichTerm nicht erreichbar (%s)' % e)
+    return 0 if ok else 1
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv))
