@@ -80,6 +80,8 @@ Nutze das aktiv, wie in einem Lehrbuch oder einem guten Browser-Chat:
   Script, keine externen Ressourcen; Höhe per Kommentar <!-- height: 500 --> steuerbar).
 - Bilder, die du mit matplotlib o.ä. als Datei erzeugst, zeigst du mit ![Beschreibung](pfad/zur/datei.png).
 - Tabellen, Überschriften und Codeblöcke wie üblich in Markdown.
+Liegen Unterlagen im Ordner rag/, bekommst du zu jeder Frage passende Auszüge daraus mitgeliefert; stütze
+dich dann darauf und nenne die Quelle (Datei, Seite).
 Der Nutzer lernt mit dir; erkläre schrittweise und zeige Rechnungen als Formeln."""
 
 
@@ -601,6 +603,193 @@ class CommandSession:
         self.interrupt()
 
 
+
+# ----------------------------------------------------------------------------
+# RAG: Unterlagen im Ordner rag/ des Arbeitsordners. Dateien werden in Abschnitte zerlegt
+# (PDF seitenweise) und per BM25 durchsucht; die passendsten Abschnitte bekommt das Modell
+# zu jeder Frage mit Quellenangabe. Ohne Zusatzbibliotheken; PDF-Text über pdftotext.
+# ----------------------------------------------------------------------------
+RAG_DIRNAME = 'rag'
+RAG_EXTS = {'.pdf', '.md', '.txt', '.markdown', '.html', '.htm', '.docx', '.csv', '.tex', '.json',
+            '.py', '.java', '.js', '.ts', '.c', '.cpp', '.h', '.rs', '.go', '.sh', '.sql', '.yaml', '.yml', '.rst'}
+RAG_STOP = set("""der die das und oder aber ist sind war waren ein eine einer eines einem einen nicht mit von zu
+im in am an auf für den dem des als auch wie bei aus nach über um es er sie ich du wir ihr man kann
+dass was wenn dann noch nur so hier da sich dies diese dieser dieses the a an and or of to in is are
+was were for with on at by this that it be as from""".split())
+
+
+def _tokens(text):
+    import re
+    return [t for t in re.findall(r'[a-zA-ZäöüÄÖÜß0-9_]+', text.lower()) if len(t) > 2 and t not in RAG_STOP]
+
+
+def _extract_text(path):
+    """-> Liste von (seitenlabel, text). Unbekanntes Format: leer."""
+    ext = os.path.splitext(path)[1].lower()
+    try:
+        if ext == '.pdf':
+            exe = shutil.which('pdftotext')
+            if not exe:
+                return [('', '[PDF-Text konnte nicht gelesen werden: pdftotext fehlt (Paket poppler-utils / poppler)]')]
+            out = subprocess.run([exe, '-layout', '-enc', 'UTF-8', path, '-'], capture_output=True, text=True, timeout=120).stdout
+            return [('S. %d' % (i + 1), p) for i, p in enumerate(out.split('\f')) if p.strip()]
+        if ext == '.docx':
+            import re
+            import zipfile
+            with zipfile.ZipFile(path) as z:
+                xml = z.read('word/document.xml').decode('utf-8', 'replace')
+            xml = re.sub(r'</w:p>', '\n', xml)
+            return [('', re.sub(r'<[^>]+>', '', xml))]
+        with open(path, encoding='utf-8', errors='replace') as fh:
+            text = fh.read()
+        if ext in ('.html', '.htm'):
+            import re
+            text = re.sub(r'<(script|style)[^>]*>.*?</\1>', ' ', text, flags=re.S | re.I)
+            text = re.sub(r'<[^>]+>', ' ', text)
+        return [('', text)]
+    except Exception as e:  # noqa: BLE001
+        return [('', '[konnte nicht gelesen werden: %s]' % e)]
+
+
+def _chunk(text, size=900, overlap=150):
+    text = ' '.join(text.split())
+    if len(text) <= size:
+        return [text] if text else []
+    chunks, i = [], 0
+    while i < len(text):
+        end = min(len(text), i + size)
+        cut = text.rfind('. ', i + size // 2, end)
+        if cut == -1 or end == len(text):
+            cut = end
+        else:
+            cut += 1
+        chunks.append(text[i:cut].strip())
+        if cut >= len(text):
+            break
+        i = max(cut - overlap, i + 1)
+    return [c for c in chunks if c]
+
+
+class Rag:
+    def __init__(self, cwd, dirname=RAG_DIRNAME, top_k=6):
+        self.dir = os.path.join(cwd, dirname)
+        self.index_path = os.path.join(self.dir, '.richterm-index.json')
+        self.top_k = top_k
+        self.lock = threading.Lock()
+        self.docs = {}            # datei -> {'mtime':..., 'chunks':[{'page':..,'text':..}]}
+        self._load_index()
+
+    def exists(self):
+        return os.path.isdir(self.dir)
+
+    def _load_index(self):
+        try:
+            with open(self.index_path, encoding='utf-8') as fh:
+                self.docs = json.load(fh)
+        except (OSError, ValueError):
+            self.docs = {}
+
+    def _save_index(self):
+        try:
+            with open(self.index_path, 'w', encoding='utf-8') as fh:
+                json.dump(self.docs, fh)
+        except OSError:
+            pass
+
+    def files(self):
+        out = []
+        for root, _dirs, names in os.walk(self.dir):
+            for n in names:
+                if n.startswith('.'):
+                    continue
+                if os.path.splitext(n)[1].lower() in RAG_EXTS:
+                    out.append(os.path.join(root, n))
+        return sorted(out)
+
+    def refresh(self):
+        """Index mit dem Ordner abgleichen. -> (anzahl dateien, anzahl abschnitte, geändert?)"""
+        if not self.exists():
+            return 0, 0, False
+        changed = False
+        with self.lock:
+            present = {}
+            for path in self.files():
+                rel = os.path.relpath(path, self.dir)
+                try:
+                    mtime = os.path.getmtime(path)
+                except OSError:
+                    continue
+                present[rel] = mtime
+                if rel in self.docs and self.docs[rel].get('mtime') == mtime:
+                    continue
+                chunks = []
+                for page, text in _extract_text(path):
+                    for c in _chunk(text):
+                        chunks.append({'page': page, 'text': c})
+                self.docs[rel] = {'mtime': mtime, 'chunks': chunks}
+                changed = True
+            for rel in list(self.docs):
+                if rel not in present:
+                    del self.docs[rel]
+                    changed = True
+            if changed:
+                self._save_index()
+            n_chunks = sum(len(d['chunks']) for d in self.docs.values())
+        return len(self.docs), n_chunks, changed
+
+    def search(self, query, k=None):
+        """BM25 über alle Abschnitte -> [(score, datei, seite, text)]"""
+        import math
+        q = _tokens(query)
+        if not q or not self.docs:
+            return []
+        k = k or self.top_k
+        with self.lock:
+            entries = [(rel, c['page'], c['text']) for rel, d in self.docs.items() for c in d['chunks']]
+        if not entries:
+            return []
+        toks = [_tokens(t) for _, _, t in entries]
+        n = len(entries)
+        avgdl = sum(len(t) for t in toks) / n
+        df = {}
+        for t in toks:
+            for w in set(t):
+                df[w] = df.get(w, 0) + 1
+        scores = []
+        for i, t in enumerate(toks):
+            if not t:
+                continue
+            tf = {}
+            for w in t:
+                tf[w] = tf.get(w, 0) + 1
+            score = 0.0
+            for w in set(q):
+                if w not in tf:
+                    continue
+                idf = math.log(1 + (n - df[w] + 0.5) / (df[w] + 0.5))
+                f = tf[w]
+                score += idf * f * 2.2 / (f + 1.2 * (0.25 + 0.75 * len(t) / avgdl))
+            if score > 0:
+                scores.append((score, i))
+        scores.sort(reverse=True)
+        return [(sc, entries[i][0], entries[i][1], entries[i][2]) for sc, i in scores[:k]]
+
+    def context_for(self, question):
+        """-> (kontextblock für das modell, [quellenliste für die anzeige])"""
+        hits = self.search(question)
+        if not hits:
+            return '', []
+        parts, sources = [], []
+        for n, (sc, rel, page, text) in enumerate(hits, 1):
+            label = rel + (' ' + page if page else '')
+            parts.append('[%d] %s\n%s' % (n, label, text))
+            if label not in sources:
+                sources.append(label)
+        block = ('Auszüge aus den Unterlagen des Nutzers (Ordner rag/). Nutze sie als Hauptquelle, zitiere die '
+                 'Quelle in eckigen Klammern (z.B. [1] oder "laut vorlesung_03.pdf S. 4"), und sag es, wenn die '
+                 'Unterlagen die Frage nicht abdecken.\n\n' + '\n\n'.join(parts))
+        return block, sources
+
 # ----------------------------------------------------------------------------
 # Verlauf: richterm-verlauf.md im Arbeitsordner.
 # Jede abgeschlossene Frage/Antwort wird angehängt. Oben steht eine Zusammenfassung,
@@ -961,6 +1150,7 @@ class Core:
         self.profile, self.profile_body, self.profile_created = load_profile(self.cfg['cwd'])
         self.profile_loaded_at = self.profile_mtime()
         self.history = self.make_history()
+        self.rag = self.make_rag()
         self.recorder = TurnRecorder()
         self.server = ThreadingHTTPServer(('127.0.0.1', 0), Receiver)
         Receiver.app = self
@@ -1051,6 +1241,9 @@ class Core:
     def ready_event(self, note, replay=False):
         if self.saved_session() and self.profile.get('backend', 'claude').lower() != 'command':
             note = 'Letzte Claude-Sitzung wird fortgesetzt · ' + note
+        if self.rag and self.rag.exists():
+            n = len(self.rag.files())
+            note = ('Unterlagen: %d Dateien in rag/ · ' % n) + note
         if self.profile_created:
             note = 'Profil angelegt: %s – bitte ausfüllen (Knopf „Profil“), dann „Neu laden“. ' % PROFILE_NAME + note
         return {'type': 'ready', 'cwd': self.cfg['cwd'], 'home': HOME, 'user': os.path.basename(HOME),
@@ -1132,6 +1325,7 @@ class Core:
         self.profile, self.profile_body, self.profile_created = load_profile(self.cfg['cwd'])
         self.profile_loaded_at = self.profile_mtime()
         self.history = self.make_history()
+        self.rag = self.make_rag()
         self.end_session()
         # Neues Profil = frische Sitzung. Eine fortgesetzte Claude-Sitzung würde an der alten Rolle
         # festhalten, weil das bisherige Gespräch das Verhalten stärker prägt als die neue Anweisung.
@@ -1139,6 +1333,25 @@ class Core:
 
     def profile_changed_on_disk(self):
         return self.profile_mtime() != getattr(self, 'profile_loaded_at', 0)
+
+    def make_rag(self):
+        enabled = str(self.profile.get('rag', 'true')).lower() not in ('false', 'no', 'nein', '0', 'off')
+        try:
+            k = int(self.profile.get('rag_chunks') or 6)
+        except ValueError:
+            k = 6
+        rag = Rag(self.cfg['cwd'], self.profile.get('rag_dir') or RAG_DIRNAME, k) if enabled else None
+        if rag and rag.exists():
+            threading.Thread(target=self.rag_refresh, args=(rag,), daemon=True).start()
+        return rag
+
+    def rag_refresh(self, rag=None):
+        rag = rag or self.rag
+        if not rag or not rag.exists():
+            return
+        files, chunks, changed = rag.refresh()
+        if changed:
+            self.ui(self.chat_event, {'type': 'status', 'text': 'Unterlagen indexiert: %d Dateien, %d Abschnitte (rag/)' % (files, chunks)})
 
     def make_history(self):
         enabled = str(self.profile.get('history', 'true')).lower() not in ('false', 'no', 'nein', '0', 'off')
@@ -1302,9 +1515,15 @@ class Core:
             return
         note, blocks = self.store_attachments(attachments)
         shown = text if not note else (text + '\n' + note).strip()
-        content = shown
+        # Unterlagen aus rag/: passende Abschnitte zur Frage mitgeben
+        rag_block, sources = '', []
+        if self.rag and self.rag.exists():
+            self.rag.refresh()
+            rag_block, sources = self.rag.context_for(text)
+        model_text = (rag_block + '\n\n---\n\nFrage des Nutzers:\n' + shown) if rag_block else shown
+        content = model_text
         if blocks:
-            content = [{'type': 'text', 'text': shown}] + blocks
+            content = [{'type': 'text', 'text': model_text}] + blocks
         if self.profile_changed_on_disk():
             # richterm.md wurde gespeichert: automatisch übernehmen, neue Sitzung mit neuem Profil
             self.reload_profile()
@@ -1336,7 +1555,7 @@ class Core:
                 return
         self.recorder.reset()
         self.recorder.user = shown
-        self.chat_event({'type': 'user_sent', 'text': shown,
+        self.chat_event({'type': 'user_sent', 'text': shown, 'sources': sources,
                          'images': [b['source']['data'] and ('data:%s;base64,%s' % (b['source']['media_type'], b['source']['data'])) for b in blocks]})
         self.session.send_user(content)
 

@@ -80,6 +80,16 @@ Beispiele; schreib sie einfach um. Werte aus dem Profil haben Vorrang vor der Ko
 So verhält sich die KI im Vorlesungsordner wie ein Tutor und im Projektordner wie ein Entwickler, ohne dass du
 es jedes Mal erklären musst.
 
+## Unterlagen: der Ordner `rag/`
+
+Lege Vorlesungsfolien, Skripte, Übungen oder Notizen in **`rag/`** im Arbeitsordner (PDF, Markdown, Text,
+DOCX, HTML, Code). RichTerm zerlegt sie in Abschnitte (PDFs seitenweise) und gibt der KI zu jeder Frage die
+passendsten Abschnitte mit Quellenangabe mit; die Antwort zitiert dann „laut vorlesung_03.pdf S. 4“. Unter
+deiner Frage steht, welche Unterlagen verwendet wurden. Das funktioniert mit jedem Modell, auch lokal, und
+die Dateien bleiben, wo sie sind. Neue oder geänderte Dateien werden automatisch neu indexiert
+(Index: `rag/.richterm-index.json`). Für PDFs wird `pdftotext` gebraucht (Paket `poppler-utils`, macOS `brew install poppler`).
+Im Profil: `rag: false` schaltet es ab, `rag_chunks` bestimmt, wie viele Abschnitte pro Frage mitgehen (Standard 6).
+
 ## Gedächtnis: `richterm-verlauf.md`
 
 Jede Frage und Antwort wird in **`richterm-verlauf.md`** im Ordner protokolliert, in Markdown mit

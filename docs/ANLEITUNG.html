@@ -40,13 +40,14 @@
   <div>3. Die Oberfläche</div>
   <div>4. Das Profil: richterm.md</div>
   <div>5. Modelle wählen und laden</div>
-  <div>6. Gedächtnis und Sitzungen</div>
-  <div>7. Berechtigungen</div>
-  <div>8. Das Terminal und der Befehl rt</div>
-  <div>9. Tastenkürzel</div>
-  <div>10. Typische Arbeitsabläufe</div>
-  <div>11. Probleme und Lösungen</div>
-  <div>12. Dateien im Überblick</div>
+  <div>6. Unterlagen: der Ordner rag/</div>
+  <div>7. Gedächtnis und Sitzungen</div>
+  <div>8. Berechtigungen</div>
+  <div>9. Das Terminal und der Befehl rt</div>
+  <div>10. Tastenkürzel</div>
+  <div>11. Typische Arbeitsabläufe</div>
+  <div>12. Probleme und Lösungen</div>
+  <div>13. Dateien im Überblick</div>
 </div>
 
 <h2>1. Was RichTerm ist</h2>
@@ -159,7 +160,17 @@ richterm                        # RichTerm öffnet sich mit diesem Ordner</code>
 </table>
 <div class="box"><b>Hintergrund (musst du nicht wissen):</b> Lokale Modelle werden über die Ollama-API angesprochen (Streaming, Gesprächsverlauf innerhalb der Sitzung). Bildfähige lokale Modelle (z. B. <code>llava</code>, <code>qwen2.5vl</code>) bekommen angehängte Bilder ebenfalls. RichTerm bringt ein eigenes Ollama mit (unter <code>~/.local/share/ollama</code>, Port 11435) und startet es bei Bedarf selbst. Im RichTerm-Terminal geht auch die Kommandozeile: <code>ollama list</code>, <code>ollama pull name</code>, <code>ollama rm name</code>. Andere KIs mit Kommandozeile lassen sich im Profil über <code>backend: command</code> und <code>command: …</code> anbinden.</div>
 
-<h2 class="page">6. Gedächtnis und Sitzungen</h2>
+<h2 class="page">6. Unterlagen: der Ordner rag/</h2>
+<p>Das ist die wichtigste Funktion fürs Lernen mit Vorlesungsfolien. Lege im Arbeitsordner einen Ordner <code>rag/</code> an und kopiere alles hinein, womit die KI arbeiten soll: Folien und Skripte als PDF, Übungsblätter, eigene Notizen (Markdown oder Text), auch DOCX, HTML und Code.</p>
+<ul>
+  <li>RichTerm zerlegt die Dateien automatisch in Abschnitte (PDFs <b>seitenweise</b>) und legt einen Index an (<code>rag/.richterm-index.json</code>). Neue oder geänderte Dateien werden beim nächsten Start oder bei der nächsten Frage erkannt.</li>
+  <li>Zu jeder Frage sucht RichTerm die passendsten Abschnitte heraus und gibt sie der KI mit, zusammen mit der Anweisung, sich darauf zu stützen und die <b>Quelle zu nennen</b> (Datei und Seite). Die Antwort sagt dann z.&nbsp;B. „laut vorlesung_03.pdf S. 4“.</li>
+  <li>Unter deiner Frage steht „📚 Unterlagen: …“ mit den verwendeten Dateien und Seiten.</li>
+  <li>Das funktioniert mit jedem Modell, auch mit lokalen. Die Dateien bleiben im Ordner; es werden nur die passenden Textausschnitte an das Modell gegeben.</li>
+</ul>
+<div class="box"><b>Praktisch:</b> Frag konkret, mit den Begriffen, die in den Unterlagen vorkommen („Was sagt die Vorlesung zur Lernrate?“, „Fasse Kapitel 3 zusammen“). Je genauer die Frage, desto besser die herausgesuchten Abschnitte. Für PDFs wird das Programm <code>pdftotext</code> gebraucht (Linux: Paket <code>poppler-utils</code>, meist vorhanden; macOS: <code>brew install poppler</code>). Im Profil: <code>rag: false</code> schaltet es ab, <code>rag_chunks</code> (Standard 6) bestimmt, wie viele Abschnitte pro Frage mitgehen.</div>
+
+<h2>7. Gedächtnis und Sitzungen</h2>
 <p>Es gibt zwei Ebenen, die zusammenarbeiten:</p>
 <h3>Claude-Code-Sitzung</h3>
 <p>Claude Code speichert jedes Gespräch selbst (unter <code>~/.claude/projects/…</code>), mit allem, was es gelesen und getan hat. RichTerm merkt sich pro Ordner die letzte Sitzung und <b>setzt sie beim nächsten Start automatisch fort</b> (Statuszeile: „Letzte Claude-Sitzung wird fortgesetzt“). <i>Neuer Chat</i> beendet das und beginnt frisch.</p>
@@ -168,7 +179,7 @@ richterm                        # RichTerm öffnet sich mit diesem Ordner</code>
 <p><b>Automatische Verdichtung:</b> Wird der Rohverlauf länger als das Budget (<code>context_chars</code>), fasst das Modell den älteren Teil zur Zusammenfassung zusammen. Das Original wandert nach <code>richterm-verlauf.archiv.md</code>; nichts geht verloren.</p>
 <p>Beide Dateien darfst du bearbeiten: die Zusammenfassung kürzen, Wichtiges ergänzen, Falsches streichen. <code>history: false</code> im Profil schaltet das Gedächtnis ab.</p>
 
-<h2>7. Berechtigungen</h2>
+<h2>8. Berechtigungen</h2>
 <p>Mit Claude Code kann die KI Werkzeuge benutzen: Dateien lesen und schreiben, Befehle ausführen, im Web suchen. Was ohne Nachfrage erlaubt ist, steuert der Berechtigungsmodus:</p>
 <table>
   <tr><th>Modus</th><th>Verhalten</th><th>Wann sinnvoll</th></tr>
@@ -178,7 +189,7 @@ richterm                        # RichTerm öffnet sich mit diesem Ordner</code>
 </table>
 <p>Feiner geht es mit <code>allowed_tools</code> / <code>disallowed_tools</code> im Profil, etwa <code>allowed_tools: Read Grep Glob</code> für einen Ordner, der nur gelesen werden darf.</p>
 
-<h2>8. Das Terminal und der Befehl rt</h2>
+<h2>9. Das Terminal und der Befehl rt</h2>
 <p><span class="kbd">Ctrl+Shift+T</span> öffnet ein Terminal im Arbeitsordner. Darin sind <code>rt</code>, <code>ollama</code> und <code>claude</code> direkt verfügbar. Mit <code>rt</code> schickst du Inhalte aus dem Terminal in den Chat:</p>
 <pre><code>rt ask 'Erkläre mir Backpropagation'    # Frage an den Chat
 rt latex '\frac{1}{1+e^{-z}}'           # Formel als Karte im Chat
@@ -190,7 +201,7 @@ rt clear                                # Chat-Karten entfernen
 rt --help                               # alle Möglichkeiten</code></pre>
 <p><code>rt</code> funktioniert auch in jedem anderen Terminal, solange RichTerm läuft. Startest du <code>claude</code> in einem RichTerm-Terminal, weiß es durch <code>~/.claude/CLAUDE.md</code>, dass es Formeln und Bilder mit <code>rt</code> in den Chat-Tab schicken kann.</p>
 
-<h2>9. Tastenkürzel</h2>
+<h2>10. Tastenkürzel</h2>
 <table>
   <tr><th>Taste</th><th>Wirkung</th></tr>
   <tr><td><span class="kbd">Enter</span> / <span class="kbd">Shift+Enter</span></td><td>Senden / Zeilenumbruch (Chat)</td></tr>
@@ -204,10 +215,10 @@ rt --help                               # alle Möglichkeiten</code></pre>
   <tr><td><span class="kbd">Ctrl</span>+Klick auf Link</td><td>Link im Browser öffnen (Terminal)</td></tr>
 </table>
 
-<h2 class="page">10. Typische Arbeitsabläufe</h2>
+<h2 class="page">11. Typische Arbeitsabläufe</h2>
 <h3>Lernen mit Vorlesungsfolien</h3>
 <ol>
-  <li>Ordner anlegen, z. B. <code>~/Uni/ML</code> mit Unterordnern <code>folien/</code>, <code>uebungen/</code>.</li>
+  <li>Ordner anlegen, z. B. <code>~/Uni/ML</code>, darin <code>rag/</code> mit Folien, Skripten und Übungen (Abschnitt 6).</li>
   <li><code>cd ~/Uni/ML</code> und <code>richterm</code>.</li>
   <li><i>Profil</i> klicken: Rolle „Tutor“, Thema, Ordnerstruktur, „Quellen nennen“, Berechtigungen auf Fragen lassen. <i>Neu laden</i>.</li>
   <li>Fragen: „Fass Folie 10–15 aus vorlesung_03.pdf zusammen und leite die Formel her.“ Claude liest das PDF und antwortet mit Formeln.</li>
@@ -226,7 +237,7 @@ rt --help                               # alle Möglichkeiten</code></pre>
   <li>Fragen stellen; Antworten dauern länger und sind einfacher, aber nichts verlässt den Rechner.</li>
 </ol>
 
-<h2>11. Probleme und Lösungen</h2>
+<h2>12. Probleme und Lösungen</h2>
 <table>
   <tr><th>Problem</th><th>Lösung</th></tr>
   <tr><td>Desktop-Icon tut nichts</td><td>Rechtsklick auf das Icon, „Starten erlauben“. Oder im Terminal <code>richterm</code>.</td></tr>
@@ -239,12 +250,13 @@ rt --help                               # alle Möglichkeiten</code></pre>
   <tr><td>Kosten im Blick behalten</td><td>Die Statuszeile zeigt Dauer und Kosten jeder Antwort. Haiku ist am günstigsten.</td></tr>
 </table>
 
-<h2>12. Dateien im Überblick</h2>
+<h2>13. Dateien im Überblick</h2>
 <table>
   <tr><th>Ort</th><th>Inhalt</th></tr>
   <tr><td><code>~/Desktop/RichTerm/</code></td><td>Das Programm (Git-Repository): <code>richterm.py</code>, <code>chat/</code>, <code>bin/rt</code>, <code>vendor/</code>, <code>profile_template.md</code>, <code>start.sh</code>, <code>README.md</code>, <code>docs/</code> (diese Anleitung).</td></tr>
   <tr><td><code>&lt;Arbeitsordner&gt;/richterm.md</code></td><td>Profil für diesen Ordner.</td></tr>
   <tr><td><code>&lt;Arbeitsordner&gt;/richterm-verlauf.md</code></td><td>Gedächtnis; <code>richterm-verlauf.archiv.md</code> = verdichtete Rohteile.</td></tr>
+  <tr><td><code>&lt;Arbeitsordner&gt;/rag/</code></td><td>Unterlagen, aus denen die KI schöpft (plus Index <code>.richterm-index.json</code>).</td></tr>
   <tr><td><code>&lt;Arbeitsordner&gt;/lernzettel/</code></td><td>Gespeicherte Antworten (Markdown).</td></tr>
   <tr><td><code>&lt;Arbeitsordner&gt;/richterm-anhang/</code></td><td>Eingefügte Bilder und Dateien.</td></tr>
   <tr><td><code>~/.config/richterm.json</code></td><td>Fenstergröße, Schrift, letzter Ordner, gemerkte Claude-Sitzungen pro Ordner.</td></tr>

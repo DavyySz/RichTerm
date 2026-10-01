@@ -42,6 +42,13 @@ history: true
 # Wie viele Zeichen Verlauf maximal mitgegeben werden. Claude verträgt viel
 # (20000–60000); kleine lokale Modelle eher 4000–8000.
 context_chars: 20000
+
+# Unterlagen: Lege Dateien (PDF, Markdown, Text, DOCX, HTML, Code) in den Ordner rag/
+# in diesem Arbeitsordner. Sie werden automatisch indexiert; zu jeder Frage bekommt
+# die KI die passendsten Abschnitte mit Quellenangabe (Datei, Seite) mitgeliefert.
+# Funktioniert mit jedem Modell, auch lokal. rag_chunks = wie viele Abschnitte pro Frage.
+rag: true
+rag_chunks: 6
 ---
 
 # Rolle

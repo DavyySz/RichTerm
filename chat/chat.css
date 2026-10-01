@@ -180,3 +180,6 @@ pre code.hljs, pre code { color: var(--ink); }
 .bubble th { background: var(--surface-2); }
 /* Fokus sichtbar */
 button:focus-visible, select:focus-visible, textarea:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* Quellen aus rag/ unter der Frage */
+.sources { text-align: right; font-family: "DejaVu Sans", sans-serif; font-size: 12px; color: var(--ink-soft); margin-top: 4px; }

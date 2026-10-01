@@ -223,6 +223,7 @@ run_setup() {                  # $1 = "start" → danach RichTerm starten, $2 = 
     fi
     [ -z "$(missing_packages)" ] && ok "Python, GTK 3, VTE, WebKitGTK"
   fi
+  command -v pdftotext >/dev/null && ok "pdftotext (PDFs im rag/-Ordner)" || warn "pdftotext fehlt: PDFs in rag/ werden nicht gelesen. Linux: sudo apt install poppler-utils · macOS: brew install poppler"
   echo; echo "2. Befehle und Menüeinträge"; make_links
   echo; echo "3. Claude Code"; setup_claude
   echo; echo "4. Lokale KI (optional)"; setup_ollama

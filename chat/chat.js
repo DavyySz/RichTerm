@@ -256,12 +256,17 @@
     return { el, bubble };
   }
 
-  function addUser(text, images) {
+  function addUser(text, images, sources) {
     const m = addMessage('user');
     m.bubble.textContent = text;
     for (const src of images || []) {
       const img = document.createElement('img'); img.src = src; img.className = 'user-img';
       m.bubble.appendChild(img);
+    }
+    if (sources && sources.length) {
+      const s = document.createElement('div'); s.className = 'sources';
+      s.textContent = '📚 Unterlagen: ' + sources.join(' · ');
+      m.el.appendChild(s);
     }
     scrollDown(true);
   }
@@ -423,7 +428,7 @@
         break;
       }
       case 'models': fillModels(ev.models || [], ev.current || 'claude:'); break;
-      case 'user_sent': addUser(ev.text, ev.images); lastQuestion = ev.text; setBusy(true); setStatus('Die KI arbeitet …'); break;
+      case 'user_sent': addUser(ev.text, ev.images, ev.sources); lastQuestion = ev.text; setBusy(true); setStatus('Die KI arbeitet …'); break;
       case 'status': setStatus(ev.text); break;
       case 'error': { const m = addMessage('assistant'); m.bubble.innerHTML = '<div class="error">' + escapeHtml(ev.text) + '</div>'; setBusy(false); break; }
       case 'claude': handleClaude(ev.msg); break;
