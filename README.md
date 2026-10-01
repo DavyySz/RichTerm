@@ -69,19 +69,14 @@ z. B. die Zusammenfassung kürzen oder Wichtiges ergänzen. `history: false` im 
 
 ## Lokale KI mit Ollama
 
-Ollama liegt ohne Installation unter `~/.local/share/ollama/dist/bin`. RichTerm startet den Dienst bei
-Bedarf selbst, auf Port 11435 mit Modellen unter `~/.local/share/ollama/models`, damit er einem evtl.
-vorhandenen (älteren) System-Ollama auf 11434 nicht in die Quere kommt. Im Profil:
+Im **Modellmenü** oben im Chat stehen neben den Claude-Modellen alle lokalen Modelle; „Lokales Modell
+herunterladen …“ lädt ein neues (Name eintippen, z. B. `qwen2.5:7b`, Laden). Die Auswahl gilt pro Ordner,
+RichTerm trägt sie selbst in `richterm.md` ein.
 
-```yaml
-backend: command
-model: qwen2.5:0.5b          # kleinstes brauchbares Modell zum Testen; besser: qwen2.5:7b
-command: ollama run {model}
-context_chars: 6000          # kleine Modelle vertragen weniger Kontext
-```
-
-Neue Modelle laden: `ollama pull qwen2.5:7b` (im RichTerm-Terminal, dort ist `ollama` im PATH).
-Lokale Modelle haben keine Dateiwerkzeuge; den Ordner lesen kann nur das Claude-Backend.
+Hintergrund: Ollama liegt ohne Installation unter `~/.local/share/ollama/dist/bin`; RichTerm startet den
+Dienst bei Bedarf selbst (Port 11435, Modelle unter `~/.local/share/ollama/models`), unabhängig von einem
+evtl. vorhandenen älteren System-Ollama. Lokale Modelle haben keine Dateiwerkzeuge; den Ordner lesen kann
+nur das Claude-Backend.
 
 ## Sitzungen: zwei Ebenen
 

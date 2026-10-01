@@ -7,13 +7,11 @@
 # Nach Änderungen: im Chat auf „Profil neu laden“ klicken.
 # ============================================================
 
-# Welche KI? "claude" = Claude Code (voller Agent: liest/schreibt Dateien,
-# führt Befehle aus). "command" = beliebige andere KI mit Kommandozeile,
-# z. B. ein lokales Modell über Ollama (nur Chat, keine Dateiwerkzeuge).
+# Welche KI antwortet: Das wählst du einfach oben im Chat aus dem Modellmenü.
+# RichTerm trägt die Wahl hier ein (backend/model). Du musst hier nichts ändern.
+# "claude" = Claude Code (liest/schreibt Dateien, führt Befehle aus).
+# "command" = andere KI mit Kommandozeile, z. B. lokales Modell über Ollama (nur Chat).
 backend: claude
-
-# Modell (bei claude: opus | sonnet | haiku | leer = Standard;
-# bei command: wird in den Befehl unten eingesetzt)
 model:
 
 # Nur für backend: command. {model} wird ersetzt. Die KI bekommt den

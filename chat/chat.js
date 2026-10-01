@@ -40,6 +40,26 @@
   function setStatus(s) { statusText.textContent = s || ''; }
   function setBusy(b) { busy = b; $('btn-stop').hidden = !b; $('btn-send').hidden = b; }
 
+  // ---------- Modellmenü ----------
+  function fillModels(models, current) {
+    const sel = $('model');
+    sel.innerHTML = '';
+    const groups = {};
+    for (const m of models) {
+      if (!groups[m.group]) { groups[m.group] = document.createElement('optgroup'); groups[m.group].label = m.group; sel.appendChild(groups[m.group]); }
+      const o = document.createElement('option'); o.value = m.id; o.textContent = m.label; groups[m.group].appendChild(o);
+    }
+    const more = document.createElement('optgroup'); more.label = 'Weitere';
+    const o = document.createElement('option'); o.value = '__pull__'; o.textContent = 'Lokales Modell herunterladen …'; more.appendChild(o);
+    sel.appendChild(more);
+    if (![...sel.options].some(x => x.value === current)) {
+      // aktuelles Modell ist (noch) nicht in der Liste, z. B. gerade erst eingetragen
+      const g = groups['Lokal (Ollama, kostenlos, privat)'] || groups['Claude'];
+      const x = document.createElement('option'); x.value = current; x.textContent = current.replace(/^\w+:/, '') || 'Claude (Standard)'; g.appendChild(x);
+    }
+    sel.value = current;
+  }
+
   // ---------- Markdown → HTML mit Formeln, Diagrammen, Vorschauen ----------
   const MATH_RE = /\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$(?!\s)[^$\n]+?(?<!\s)\$/g;
 
@@ -242,13 +262,10 @@
       case 'ready':
         cwd = ev.cwd; $('cwd').textContent = ev.cwd.replace(ev.home, '~');
         window.RT_USER = ev.user;
-        $('model').value = ev.model || '';
+        fillModels(ev.models || [], ev.current || 'claude:');
         $('perm').value = ev.perm || 'default';
-        // vom Profil festgelegte Werte sind in der Kopfzeile gesperrt
-        $('model').disabled = !!(ev.locked && ev.locked.model);
         $('perm').disabled = !!(ev.locked && ev.locked.perm) || ev.backend === 'command';
-        $('model').title = $('model').disabled ? 'im Profil (richterm.md) festgelegt' : 'Modell';
-        $('perm').title = $('perm').disabled ? 'im Profil (richterm.md) festgelegt' : 'Berechtigungen';
+        $('perm').title = $('perm').disabled ? (ev.backend === 'command' ? 'Lokale Modelle haben keine Werkzeuge' : 'im Profil (richterm.md) festgelegt') : 'Berechtigungen';
         $('btn-profile').textContent = ev.profile ? 'Profil' : 'Profil anlegen';
         if (ev.replay && ev.replay.length && !messages.querySelector('.msg')) {
           // letzte Einträge aus richterm-verlauf.md zur Orientierung anzeigen
@@ -358,7 +375,14 @@
   $('btn-folder').onclick = () => send({ cmd: 'choose_folder' });
   $('btn-profile').onclick = () => send({ cmd: 'profile_edit' });
   $('btn-reload').onclick = () => send({ cmd: 'profile_reload' });
-  $('model').onchange = () => send({ cmd: 'set', key: 'model', value: $('model').value });
+  $('model').onchange = () => {
+    if ($('model').value === '__pull__') { $('pull-box').hidden = false; $('pull-name').focus(); return; }
+    send({ cmd: 'choose_model', value: $('model').value });
+  };
+  const doPull = () => { const n = $('pull-name').value.trim(); if (n) { send({ cmd: 'pull_model', name: n }); $('pull-box').hidden = true; $('pull-name').value = ''; } };
+  $('btn-pull').onclick = doPull;
+  $('pull-name').addEventListener('keydown', e => { if (e.key === 'Enter') doPull(); if (e.key === 'Escape') $('btn-pull-cancel').click(); });
+  $('btn-pull-cancel').onclick = () => { $('pull-box').hidden = true; send({ cmd: 'ready' }); };
   $('perm').onchange = () => send({ cmd: 'set', key: 'perm', value: $('perm').value });
   $('btn-theme').onclick = () => { theme = theme === 'light' ? 'dark' : 'light'; applyPrefs(); };
   document.addEventListener('keydown', e => {

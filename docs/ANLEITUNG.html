@@ -74,7 +74,7 @@ richterm                        # RichTerm öffnet sich mit diesem Ordner</code>
 <table>
   <tr><th>Element</th><th>Funktion</th></tr>
   <tr><td>Ordnerknopf (oben links)</td><td>Zeigt den Arbeitsordner; Klick öffnet die Ordnerwahl. Ein Wechsel startet eine neue Sitzung.</td></tr>
-  <tr><td>Modell</td><td>Standard / Opus / Sonnet / Haiku. Gesperrt, wenn das Profil ein Modell festlegt.</td></tr>
+  <tr><td>Modellmenü</td><td>Welche KI antwortet: Claude-Modelle, lokale Modelle, „Lokales Modell herunterladen …“ (Abschnitt 5). Gilt für diesen Ordner.</td></tr>
   <tr><td>Berechtigungen</td><td>Fragen / Dateien bearbeiten erlauben / Alles erlauben (Abschnitt 7). Gesperrt, wenn das Profil es festlegt.</td></tr>
   <tr><td>Profil</td><td>Öffnet <code>richterm.md</code> im Editor.</td></tr>
   <tr><td>Neu laden</td><td>Liest das Profil neu ein (nach dem Bearbeiten). Gilt ab der nächsten Nachricht.</td></tr>
@@ -96,8 +96,7 @@ richterm                        # RichTerm öffnet sich mit diesem Ordner</code>
 <h3>Oben: Einstellungen</h3>
 <table>
   <tr><th>Feld</th><th>Werte</th><th>Bedeutung</th></tr>
-  <tr><td><code>backend</code></td><td><code>claude</code> · <code>command</code></td><td><code>claude</code> = Claude Code, voller Agent mit Dateizugriff. <code>command</code> = beliebige andere KI mit Kommandozeile, nur Chat.</td></tr>
-  <tr><td><code>model</code></td><td><code>opus</code> · <code>sonnet</code> · <code>haiku</code> · leer; bei <code>command</code> der Modellname, z. B. <code>qwen2.5:7b</code></td><td>Leer = Auswahl in der Kopfzeile gilt.</td></tr>
+  <tr><td><code>backend</code>, <code>model</code></td><td>werden vom Modellmenü gesetzt</td><td>Nicht von Hand nötig. <code>claude</code> = Claude Code mit Dateizugriff; <code>command</code> = andere KI, nur Chat.</td></tr>
   <tr><td><code>command</code></td><td>z. B. <code>ollama run {model}</code></td><td>Nur für <code>command</code>. <code>{model}</code> wird ersetzt.</td></tr>
   <tr><td><code>permissions</code></td><td><code>default</code> · <code>acceptEdits</code> · <code>bypassPermissions</code></td><td><code>default</code> = Kopfzeile entscheidet; sonst festgelegt und gesperrt.</td></tr>
   <tr><td><code>allowed_tools</code></td><td>z. B. <code>Read Grep Glob</code></td><td>Nur diese Werkzeuge: hier reines Lesen, nichts wird geändert.</td></tr>
@@ -120,31 +119,30 @@ richterm                        # RichTerm öffnet sich mit diesem Ordner</code>
 <div class="box"><b>Nach jeder Änderung:</b> im Chat auf <i>Neu laden</i> klicken. Die Änderung gilt ab der nächsten Nachricht (es wird eine neue Sitzung gestartet; der Verlauf bleibt erhalten).</div>
 
 <h2>5. Modelle wählen und laden</h2>
-<h3>Claude-Modelle</h3>
-<p>Mit <code>backend: claude</code> stehen <b>Opus</b> (stärkstes, teuerstes), <b>Sonnet</b> (ausgewogen) und <b>Haiku</b> (schnell, günstig) zur Wahl, entweder in der Kopfzeile oder fest im Profil (<code>model: sonnet</code>). Für Lernen mit Herleitungen empfiehlt sich Sonnet oder Opus, für schnelle Nachfragen Haiku. Die Kosten der letzten Antwort stehen in der Statuszeile. Ein Modellwechsel startet eine neue Sitzung; der Kontext kommt aus der Verlaufsdatei (Abschnitt 6).</p>
-<h3>Lokale Modelle (Ollama)</h3>
-<p>RichTerm bringt ein eigenes Ollama mit, ohne Installation, unter <code>~/.local/share/ollama</code>. Es läuft auf Port 11435 mit Modellen unter <code>~/.local/share/ollama/models</code> und wird bei Bedarf automatisch gestartet. Ein eventuell vorhandener älterer System-Ollama-Dienst (Port 11434) wird nicht benutzt.</p>
-<p><b>Ein neues Modell laden:</b> ein RichTerm-Terminal öffnen (<span class="kbd">Ctrl+Shift+T</span>, dort stimmen Pfad und Port automatisch) und eingeben:</p>
-<pre><code>ollama pull qwen2.5:7b        # lädt das Modell (ca. 4,7 GB), einmalig
-ollama list                   # zeigt die geladenen Modelle
-ollama rm qwen2.5:0.5b        # löscht ein Modell wieder</code></pre>
-<p>Modellnamen findest du auf <code>ollama.com/library</code>. Dann im Profil:</p>
-<pre><code>backend: command
-model: qwen2.5:7b
-command: ollama run {model}
-context_chars: 6000</code></pre>
-<p>Neu laden, fertig. Die Antworten werden genauso gerendert wie bei Claude.</p>
+<p>Oben im Chat gibt es das <b>Modellmenü</b>. Dort stehen alle Claude-Modelle und alle lokalen Modelle, die auf deinem Rechner liegen. <b>Auswählen, fertig.</b> Die Wahl gilt für diesen Ordner und ab der nächsten Nachricht; RichTerm trägt sie selbst in <code>richterm.md</code> ein. Du musst keine Datei bearbeiten.</p>
 <table>
-  <tr><th>Modell</th><th>Größe</th><th>Eignung auf deinem Laptop (CPU, 31 GB RAM)</th></tr>
+  <tr><th>Menüeintrag</th><th>Was es ist</th></tr>
+  <tr><td>Claude (Standard) / Opus / Sonnet / Haiku</td><td>Claude Code. Liest deine Dateien, führt Code aus, schreibt Dateien. Opus = am stärksten, Sonnet = ausgewogen, Haiku = schnell und günstig. Kosten pro Antwort stehen in der Statuszeile.</td></tr>
+  <tr><td>Lokal (Ollama): z. B. qwen2.5:7b (4.7 GB)</td><td>Läuft komplett auf deinem Rechner: kostenlos, nichts verlässt den PC. Kann keine Dateien lesen, nur chatten. Langsamer und einfacher als Claude.</td></tr>
+  <tr><td>Lokales Modell herunterladen …</td><td>Ein Feld erscheint: Modellnamen eintippen (z. B. <code>qwen2.5:7b</code>), <i>Laden</i> klicken. Der Fortschritt steht in der Statuszeile; danach ist das Modell im Menü und ausgewählt.</td></tr>
+</table>
+<h3>Ein neues lokales Modell holen, Schritt für Schritt</h3>
+<ol>
+  <li>Im Modellmenü <b>„Lokales Modell herunterladen …“</b> wählen.</li>
+  <li>Namen eintippen, z. B. <code>qwen2.5:7b</code>, und auf <b>Laden</b> klicken. Namen findest du auf <code>ollama.com/library</code>.</li>
+  <li>Warten (4,7 GB dauern ein paar Minuten; die Statuszeile zeigt Prozent). Das Modell ist danach automatisch ausgewählt.</li>
+  <li>Frage stellen.</li>
+</ol>
+<p>Zurück zu Claude: im Menü wieder ein Claude-Modell wählen.</p>
+<table>
+  <tr><th>Lokales Modell</th><th>Größe</th><th>Eignung auf deinem Laptop (CPU, 31 GB RAM)</th></tr>
   <tr><td><code>qwen2.5:0.5b</code></td><td>0,4 GB</td><td>Nur zum Testen; antwortet in Sekunden, ignoriert Kontext oft.</td></tr>
   <tr><td><code>qwen2.5:3b</code></td><td>1,9 GB</td><td>Schnell, einfaches Niveau.</td></tr>
   <tr><td><code>qwen2.5:7b</code></td><td>4,7 GB</td><td>Beste Mischung aus Deutsch, Mathe und Code; 4–8 Wörter/s.</td></tr>
   <tr><td><code>llama3.1:8b</code></td><td>4,9 GB</td><td>Solide Allzweck-Wahl.</td></tr>
   <tr><td><code>qwen2.5:14b</code></td><td>9 GB</td><td>Besser, aber nur 1–3 Wörter/s.</td></tr>
 </table>
-<div class="box"><b>Grenzen lokaler Modelle:</b> keine Dateiwerkzeuge (sie können den Ordner nicht selbst lesen), deutlich schwächer als Claude bei längeren Herleitungen, aber kostenlos und vollständig privat. Nur das Claude-Backend liest Folien, führt Code aus und schreibt Dateien.</div>
-<h3>Andere KI mit Kommandozeile</h3>
-<p><code>backend: command</code> funktioniert mit jedem Programm, das den Text auf stdin liest und die Antwort auf stdout ausgibt. RichTerm übergibt Profil und bisherigen Gesprächsverlauf als Text, z. B. <code>command: llm -m {model}</code>.</p>
+<div class="box"><b>Hintergrund (musst du nicht wissen):</b> RichTerm bringt ein eigenes Ollama mit (unter <code>~/.local/share/ollama</code>, Port 11435) und startet es bei Bedarf selbst. Im RichTerm-Terminal geht auch die Kommandozeile: <code>ollama list</code>, <code>ollama pull name</code>, <code>ollama rm name</code>. Andere KIs mit Kommandozeile lassen sich im Profil über <code>backend: command</code> und <code>command: …</code> anbinden.</div>
 
 <h2 class="page">6. Gedächtnis und Sitzungen</h2>
 <p>Es gibt zwei Ebenen, die zusammenarbeiten:</p>
@@ -208,8 +206,8 @@ rt --help                               # alle Möglichkeiten</code></pre>
 </ol>
 <h3>Kostenlos und privat mit lokalem Modell</h3>
 <ol>
-  <li>Einmalig im RichTerm-Terminal: <code>ollama pull qwen2.5:7b</code>.</li>
-  <li>Im Profil <code>backend: command</code>, <code>model: qwen2.5:7b</code>, <code>context_chars: 6000</code>. <i>Neu laden</i>.</li>
+  <li>Modellmenü → „Lokales Modell herunterladen …“ → <code>qwen2.5:7b</code> → Laden (einmalig).</li>
+  <li>Das Modell ist danach ausgewählt; sonst im Menü wählen.</li>
   <li>Fragen stellen; Antworten dauern länger und sind einfacher, aber nichts verlässt den Rechner.</li>
 </ol>
 
@@ -221,7 +219,7 @@ rt --help                               # alle Möglichkeiten</code></pre>
   <tr><td>Lokales Modell antwortet nicht oder ewig</td><td>Im RichTerm-Terminal <code>ollama list</code> und <code>ollama ps</code> prüfen. Läuft ein alter System-Ollama auf 11434, stört er nicht; RichTerm benutzt Port 11435. Notfalls <code>pkill -f "ollama serve"</code> für den eigenen Dienst; er startet beim nächsten Mal neu.</td></tr>
   <tr><td>Antwort wird abgeschnitten / Prozess beendet</td><td>Statuszeile lesen; <i>Neuer Chat</i> starten. Der Verlauf bleibt in <code>richterm-verlauf.md</code>.</td></tr>
   <tr><td>Profiländerung wirkt nicht</td><td><i>Neu laden</i> klicken; gilt ab der nächsten Nachricht. Prüfen, ob das Feld oben (Einstellungen) oder unten (Text) gemeint ist.</td></tr>
-  <tr><td>Modell/Berechtigungen in der Kopfzeile gesperrt</td><td>Das Profil legt sie fest. Im Profil leer bzw. <code>default</code> eintragen, dann entscheidet die Kopfzeile.</td></tr>
+  <tr><td>Berechtigungen in der Kopfzeile gesperrt</td><td>Das Profil legt sie fest (<code>permissions:</code>). Dort <code>default</code> eintragen, dann entscheidet die Kopfzeile. Bei lokalen Modellen gibt es keine Berechtigungen, weil sie keine Werkzeuge haben.</td></tr>
   <tr><td>Formeln werden nicht gerendert</td><td>Die KI muss LaTeX mit <code>$…$</code> schreiben; das steht im Profil. Bei lokalen Modellen hilft ein Hinweis in der Frage.</td></tr>
   <tr><td>Kosten im Blick behalten</td><td>Die Statuszeile zeigt Dauer und Kosten jeder Antwort. Haiku ist am günstigsten.</td></tr>
 </table>

@@ -14,12 +14,12 @@
 <header id="bar">
   <button id="btn-folder" title="Arbeitsordner wählen (die KI sieht die Dateien darin)"><span id="cwd">~</span></button>
   <span class="spacer"></span>
-  <select id="model" title="Modell">
-    <option value="">Standard</option>
-    <option value="opus">Opus</option>
-    <option value="sonnet">Sonnet</option>
-    <option value="haiku">Haiku</option>
-  </select>
+  <select id="model" title="Welche KI antwortet (gilt für diesen Ordner)"></select>
+  <span id="pull-box" hidden>
+    <input id="pull-name" placeholder="Modellname, z. B. qwen2.5:7b" size="22">
+    <button id="btn-pull">Laden</button>
+    <button id="btn-pull-cancel" title="Abbrechen">✕</button>
+  </span>
   <select id="perm" title="Berechtigungen">
     <option value="default">Fragen</option>
     <option value="acceptEdits">Dateien bearbeiten erlauben</option>

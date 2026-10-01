@@ -130,6 +130,49 @@ def load_profile(cwd):
     return settings, body.strip(), created
 
 
+def update_profile_settings(cwd, **changes):
+    """Setzt Schlüssel im Einstellungsblock von richterm.md (legt Datei/Schlüssel bei Bedarf an)."""
+    path = os.path.join(cwd, PROFILE_NAME)
+    if not os.path.exists(path):
+        load_profile(cwd)
+    with open(path, encoding='utf-8') as fh:
+        text = fh.read()
+    if not text.startswith('---'):
+        text = '---\n---\n' + text
+    end = text.find('\n---', 3)
+    head, rest = text[3:end], text[end:]
+    lines = head.split('\n')
+    for key, value in changes.items():
+        done = False
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if not stripped.startswith('#') and stripped.split(':', 1)[0].strip().lower() == key:
+                lines[i] = '%s: %s' % (key, value)
+                done = True
+                break
+        if not done:
+            lines.append('%s: %s' % (key, value))
+    with open(path, 'w', encoding='utf-8') as fh:
+        fh.write('---' + '\n'.join(lines) + rest)
+
+
+def list_local_models():
+    """Lokal verfügbare Ollama-Modelle: [(name, größe_gb)]."""
+    import urllib.request
+    exe = find_ollama()
+    if not exe:
+        return []
+    host = OLLAMA_HOST if exe == OLLAMA_LOCAL else os.environ.get('OLLAMA_HOST', '127.0.0.1:11434')
+    try:
+        if not ensure_ollama_running(timeout=8):
+            return []
+        with urllib.request.urlopen('http://%s/api/tags' % host, timeout=5) as resp:
+            data = json.load(resp)
+        return [(m['name'], round(m.get('size', 0) / 1e9, 1)) for m in data.get('models', [])]
+    except Exception:  # noqa: BLE001
+        return []
+
+
 def build_system_prompt(settings, body):
     parts = [SYSTEM_NOTE]
     lang = settings.get('language')
@@ -352,12 +395,29 @@ class CommandSession:
         ev({'type': 'message_start'})
         ev({'type': 'content_block_start', 'index': 0, 'content_block': {'type': 'text', 'text': ''}})
         answer = []
+        import re
+        ansi = re.compile(r'\x1b\[[0-9;?]*[A-Za-z]|\x1b[()][A-Za-z0-9]|[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')
+        pending = ''
         while True:
             chunk = self.proc.stdout.read(64)
             if not chunk:
                 break
-            answer.append(chunk)
-            ev({'type': 'content_block_delta', 'index': 0, 'delta': {'type': 'text_delta', 'text': chunk}})
+            pending += chunk
+            # unvollständige Escape-Sequenz am Ende zurückhalten, bis der Rest da ist
+            cut = pending.rfind('\x1b')
+            if cut != -1 and not re.match(r'\x1b\[[0-9;?]*[A-Za-z]|\x1b[()][A-Za-z0-9]', pending[cut:]):
+                out, pending = pending[:cut], pending[cut:]
+            else:
+                out, pending = pending, ''
+            out = ansi.sub('', out)
+            if out:
+                answer.append(out)
+                ev({'type': 'content_block_delta', 'index': 0, 'delta': {'type': 'text_delta', 'text': out}})
+        if pending:
+            out = ansi.sub('', pending)
+            if out:
+                answer.append(out)
+                ev({'type': 'content_block_delta', 'index': 0, 'delta': {'type': 'text_delta', 'text': out}})
         ev({'type': 'content_block_stop', 'index': 0})
         code = self.proc.wait()
         full = ''.join(answer).strip()
@@ -787,10 +847,69 @@ class RichTerm(Gtk.Window):
         return {'type': 'ready', 'cwd': self.cfg['cwd'], 'home': HOME, 'user': os.path.basename(HOME),
                 'model': self.effective('model'), 'perm': self.effective_perm(),
                 'backend': self.profile.get('backend', 'claude'),
-                'locked': {'model': bool(self.profile.get('model')), 'perm': bool(self.profile_perm())},
+                'models': self.model_choices(), 'current': self.current_choice(),
+                'locked': {'model': False, 'perm': bool(self.profile_perm())},
                 'profile': PROFILE_NAME if os.path.exists(os.path.join(self.cfg['cwd'], PROFILE_NAME)) else '',
                 'replay': [{'role': r, 'time': t, 'text': x} for r, t, x in self.history.recent_turns()] if replay else [],
                 'note': note}
+
+    def model_choices(self):
+        choices = [{'id': 'claude:', 'group': 'Claude', 'label': 'Claude (Standard)'},
+                   {'id': 'claude:opus', 'group': 'Claude', 'label': 'Claude Opus (am stärksten)'},
+                   {'id': 'claude:sonnet', 'group': 'Claude', 'label': 'Claude Sonnet (ausgewogen)'},
+                   {'id': 'claude:haiku', 'group': 'Claude', 'label': 'Claude Haiku (schnell, günstig)'}]
+        for name, gb in list_local_models():
+            choices.append({'id': 'ollama:' + name, 'group': 'Lokal (Ollama, kostenlos, privat)',
+                            'label': '%s (%s GB)' % (name, gb)})
+        return choices
+
+    def current_choice(self):
+        if self.profile.get('backend', 'claude').lower() == 'command':
+            return 'ollama:' + (self.profile.get('model') or '')
+        return 'claude:' + (self.profile.get('model') or self.cfg.get('model', '') or '')
+
+    def choose_model(self, choice):
+        """Auswahl aus dem Menü in richterm.md eintragen und neue Sitzung vorbereiten."""
+        kind, _, name = choice.partition(':')
+        if kind == 'ollama':
+            update_profile_settings(self.cfg['cwd'], backend='command', model=name, command='ollama run {model}')
+            if int(self.profile.get('context_chars') or 20000) > 8000:
+                update_profile_settings(self.cfg['cwd'], context_chars='6000')
+        else:
+            update_profile_settings(self.cfg['cwd'], backend='claude', model=name)
+            self.cfg['model'] = name
+            save_config(self.cfg)
+        self.reload_profile()
+        self.chat_event(self.ready_event('Modell gewechselt: %s · gilt ab der nächsten Nachricht' % (name or 'Claude Standard')))
+
+    def pull_model(self, name):
+        """Lokales Modell herunterladen, Fortschritt in der Statuszeile."""
+        name = name.strip()
+        if not name:
+            return
+        exe = find_ollama()
+        if not exe or not ensure_ollama_running():
+            self.chat_event({'type': 'error', 'text': 'Ollama ist nicht verfügbar.'})
+            return
+
+        def run():
+            GLib.idle_add(self.chat_event, {'type': 'status', 'text': 'Lade Modell %s … (läuft im Hintergrund)' % name})
+            p = subprocess.Popen([exe, 'pull', name], env=ollama_env(os.environ), stdout=subprocess.PIPE,
+                                 stderr=subprocess.STDOUT, text=True)
+            last = ''
+            for line in p.stdout:
+                import re
+                m = re.search(r'(\d+)%', line)
+                if m and m.group(1) != last:
+                    last = m.group(1)
+                    GLib.idle_add(self.chat_event, {'type': 'status', 'text': 'Lade Modell %s … %s %%' % (name, last)})
+            ok = p.wait() == 0
+            if ok:
+                GLib.idle_add(self.choose_model, 'ollama:' + name)
+                GLib.idle_add(self.chat_event, {'type': 'status', 'text': 'Modell %s geladen und ausgewählt.' % name})
+            else:
+                GLib.idle_add(self.chat_event, {'type': 'error', 'text': 'Modell %s konnte nicht geladen werden. Name prüfen (ollama.com/library).' % name})
+        threading.Thread(target=run, daemon=True).start()
 
     def reload_profile(self):
         self.profile, self.profile_body, self.profile_created = load_profile(self.cfg['cwd'])
@@ -872,9 +991,13 @@ class RichTerm(Gtk.Window):
             self.end_session()
             self.forget_session()
             self.chat_event({'type': 'status', 'text': 'Neuer Chat (ohne Fortsetzung der alten Claude-Sitzung) · Ordner: ' + self.cfg['cwd']})
+        elif cmd == 'choose_model':
+            self.choose_model(data.get('value', 'claude:'))
+        elif cmd == 'pull_model':
+            self.pull_model(data.get('name', ''))
         elif cmd == 'set':
             key, value = data.get('key'), data.get('value', '')
-            if key in ('model', 'perm'):
+            if key in ('perm',):
                 self.cfg[key] = value
                 save_config(self.cfg)
                 self.end_session()
