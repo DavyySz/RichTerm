@@ -1431,8 +1431,9 @@ class Core:
                 'note': note}
 
     def model_choices(self, local=True):
-        choices = [{'id': 'claude:', 'group': 'Claude', 'label': 'Claude (Standard)'},
-                   {'id': 'claude:opus', 'group': 'Claude', 'label': 'Claude Opus (am stärksten)'},
+        choices = [{'id': 'claude:', 'group': 'Claude', 'label': 'Claude (Standard der Claude-Code-Einstellung)'},
+                   {'id': 'claude:fable', 'group': 'Claude', 'label': 'Claude Fable 5.1 (am stärksten)'},
+                   {'id': 'claude:opus', 'group': 'Claude', 'label': 'Claude Opus'},
                    {'id': 'claude:sonnet', 'group': 'Claude', 'label': 'Claude Sonnet (ausgewogen)'},
                    {'id': 'claude:haiku', 'group': 'Claude', 'label': 'Claude Haiku (schnell, günstig)'}]
         if not local:
