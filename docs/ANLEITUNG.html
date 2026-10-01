@@ -59,6 +59,11 @@
 <p>Es ist nichts installiert worden: RichTerm besteht aus Python und den Bibliotheken, die Linux Mint ohnehin mitbringt. Das Projekt liegt unter <code>~/Desktop/RichTerm</code> und ist ein Git-Repository.</p>
 
 <h2>2. Starten</h2>
+<h3>Zum ersten Mal (neuer Rechner)</h3>
+<pre><code>git clone https://github.com/DavyySz/RichTerm.git
+cd RichTerm
+./richterm</code></pre>
+<p>Beim ersten Start richtet sich RichTerm selbst ein: Es prüft die Systempakete und installiert fehlende (fragt nach dem Administrator-Passwort), legt die Befehle <code>richterm</code> und <code>rt</code> an, Menü- und Desktop-Einträge, und bietet an, Claude Code und ein lokales Ollama zu installieren. Ist alles da, startet es einfach. Nur Linux.</p>
 <h3>Im aktuellen Ordner (der übliche Weg)</h3>
 <pre><code>cd ~/Uni/Maschinelles_Lernen     # Ordner mit Folien, Übungen, Notizen
 richterm                        # RichTerm öffnet sich mit diesem Ordner</code></pre>

@@ -18,12 +18,15 @@ Dazu Tabs mit einem vollwertigen Terminal (VTE, dieselbe Engine wie GNOME Termin
 ```bash
 git clone https://github.com/DavyySz/RichTerm.git
 cd RichTerm
-./install.sh
+./richterm
 ```
 
-Das Skript prüft die Voraussetzungen, legt die Befehle `richterm` und `rt` in `~/.local/bin` an, einen
-Menü-/Desktop-Eintrag und (bei Nemo) einen Rechtsklick-Eintrag, und bietet an, ein lokales Ollama für
-Offline-Modelle nach `~/.local` zu laden. Keine Root-Rechte nötig. `./install.sh --uninstall` entfernt die Verknüpfungen.
+Mehr nicht. Beim ersten Start prüft RichTerm selbst, was fehlt, und richtet es ein: Systempakete (fragt
+nach dem Administrator-Passwort, `apt`/`dnf`/`pacman`/`zypper`), die Befehle `richterm` und `rt` in
+`~/.local/bin`, Menü-/Desktop-Eintrag, Rechtsklick-Eintrag (Nemo), auf Wunsch Claude Code und ein lokales
+Ollama für Offline-Modelle. Ist alles da, startet es einfach (die Prüfung dauert eine Viertelsekunde).
+Danach überall: `cd <ordner> && richterm`. `./setup.sh --uninstall` entfernt die Verknüpfungen,
+`./install.sh` richtet alles ein, ohne zu starten.
 
 **Voraussetzungen:** Python 3 mit GObject-Bindungen, GTK 3, VTE 2.91, WebKitGTK 4.1 (auf Linux Mint und
 Ubuntu vorinstalliert; sonst z. B. `sudo apt install python3-gi gir1.2-gtk-3.0 gir1.2-vte-2.91 gir1.2-webkit2-4.1`)
