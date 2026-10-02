@@ -807,6 +807,9 @@ class Rag:
         except OSError:
             pass
 
+    def file_count(self):
+        return sum(1 for d in self.docs.values() if not d.get('dup_of'))
+
     def files(self):
         out = []
         for root, _dirs, names in os.walk(self.dir):
@@ -823,8 +826,10 @@ class Rag:
         if not self.exists():
             return 0, 0, False
         changed = False
+        import hashlib
         with self.lock:
             present = {}
+            hashes = {d['hash']: rel for rel, d in self.docs.items() if d.get('hash') and not d.get('dup_of')}
             for path in self.files():
                 rel = os.path.relpath(path, self.dir)
                 try:
@@ -834,15 +839,33 @@ class Rag:
                 present[rel] = mtime
                 if rel in self.docs and self.docs[rel].get('mtime') == mtime:
                     continue
+                h = hashlib.sha1()
+                with open(path, 'rb') as fh:
+                    for block in iter(lambda: fh.read(1 << 20), b''):
+                        h.update(block)
+                digest = h.hexdigest()
+                original = hashes.get(digest)
+                if original and original != rel and original in self.docs:
+                    # inhaltsgleiche Datei (z.B. in self_data/ und anderswo): nur Verweis, nicht doppelt indexieren
+                    self.docs[rel] = {'mtime': mtime, 'hash': digest, 'dup_of': original, 'chunks': []}
+                    changed = True
+                    continue
                 chunks = []
                 for page, text in _extract_text(path):
                     for c in _chunk(text):
                         chunks.append({'page': page, 'text': c})
-                self.docs[rel] = {'mtime': mtime, 'chunks': chunks}
+                self.docs[rel] = {'mtime': mtime, 'hash': digest, 'chunks': chunks}
+                hashes[digest] = rel
                 changed = True
             for rel in list(self.docs):
                 if rel not in present:
                     del self.docs[rel]
+                    changed = True
+            # Verweise, deren Original weg ist: beim nächsten Durchlauf neu indexieren
+            for rel, d in list(self.docs.items()):
+                if d.get('dup_of') and d['dup_of'] not in self.docs:
+                    del self.docs[rel]
+                    del present[rel]
                     changed = True
             # Einbettungen für Abschnitte ohne Vektor nachholen (semantische Suche), falls das Modell da ist
             if changed:
@@ -913,8 +936,24 @@ class Rag:
         scopes: nur diese Ordner (mit Unterordnern) bzw. Dateien durchsuchen. -> [(score, datei, seite, text)]"""
         k = k or self.top_k
         with self.lock:
-            entries = [(rel, c['page'], c['text'], c.get('vec')) for rel, d in self.docs.items()
-                       if self._in_scope(rel, scopes) for c in d['chunks']]
+            # Verweise (dup_of) zählen für den Suchbereich wie ihr Original
+            aliases = {}
+            for rel, d in self.docs.items():
+                if d.get('dup_of'):
+                    aliases.setdefault(d['dup_of'], []).append(rel)
+            entries, seen = [], set()
+            for rel, d in self.docs.items():
+                if d.get('dup_of'):
+                    continue
+                names = [rel] + aliases.get(rel, [])
+                if not any(self._in_scope(n, scopes) for n in names):
+                    continue
+                for c in d['chunks']:
+                    key = c['text'][:200]
+                    if key in seen:          # identischer Abschnitt aus einer anderen Datei: nur einmal
+                        continue
+                    seen.add(key)
+                    entries.append((rel, c['page'], c['text'], c.get('vec')))
         if not entries:
             return []
         bm = self._bm25(query, [(r, p, t) for r, p, t, _ in entries])

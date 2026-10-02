@@ -116,7 +116,8 @@ indexiert; neue oder geänderte Dateien werden automatisch erkannt. Die Suche is
 Bedeutung über ein kleines lokales Einbettungsmodell (`embeddinggemma`, 620 MB, wird beim ersten Mal automatisch
 über Ollama geladen und rechnet im Hintergrund; bis dahin läuft die Stichwortsuche). So findet „Schrittweite“ auch
 eine Folie mit „Lernrate“, und Fragen ohne Bezug zu den Unterlagen („Hauptstadt von Peru“) liefern keine Treffer.
-Die Dateien bleiben, wo sie sind; das Modell sieht nur die passenden Ausschnitte.
+Die Dateien bleiben, wo sie sind; das Modell sieht nur die passenden Ausschnitte. Inhaltsgleiche Dateien (z. B. dieselbe
+PDF in `self_data/` und in einem anderen Ordner) werden nur einmal indexiert und erscheinen nur einmal in den Treffern.
 
 Voraussetzung für PDFs: `pdftotext` (Linux-Paket `poppler-utils`, meist vorhanden; macOS `brew install poppler`).
 Im Profil: `rag_chunks` (Standard 6) = Abschnitte pro Frage, `rag: false` schaltet alles ab.
