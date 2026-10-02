@@ -49,6 +49,32 @@ HOME = os.path.expanduser('~')
 CONFIG_PATH = os.path.join(_xdg('XDG_CONFIG_HOME', '.config'), 'richterm.json')
 PORT_FILE = os.path.join(os.environ.get('XDG_RUNTIME_DIR') or _xdg('XDG_CACHE_HOME', '.cache'), 'richterm.port')
 HTML_DIR = os.path.join(_xdg('XDG_CACHE_HOME', '.cache'), 'richterm', 'html')
+BG_BUNDLED = os.path.join(HERE, 'backgrounds')
+BG_USER = os.path.join(_xdg('XDG_CONFIG_HOME', '.config'), 'richterm', 'backgrounds')   # eigene Bilder hier ablegen
+BG_LABELS = {'nebelwald': 'Nebelwald', 'berge': 'Nebelberge', 'nebelhuegel': 'Nebelhügel', 'wald_dunkel': 'Herbstwald',
+             'nacht': 'Nachthimmel', 'nordlicht': 'Nordlicht', 'wueste': 'Wüste bei Nacht'}
+
+
+def list_backgrounds():
+    """[{id, label, path}] aus dem mitgelieferten und dem eigenen Ordner."""
+    out = []
+    for prefix, folder in (('', BG_BUNDLED), ('eigene/', BG_USER)):
+        if not os.path.isdir(folder):
+            continue
+        for n in sorted(os.listdir(folder)):
+            base, ext = os.path.splitext(n)
+            if ext.lower() in ('.jpg', '.jpeg', '.png', '.webp'):
+                label = BG_LABELS.get(base, base.replace('_', ' ').capitalize())
+                out.append({'id': prefix + n, 'label': ('Eigenes Bild: ' if prefix else '') + label,
+                            'path': os.path.join(folder, n)})
+    return out
+
+
+def background_path(bg_id):
+    for b in list_backgrounds():
+        if b['id'] == bg_id:
+            return b['path']
+    return None
 
 DEFAULTS = {
     'font': 'DejaVu Sans Mono 11',
@@ -1259,6 +1285,11 @@ class Receiver(BaseHTTPRequestHandler):
             return self._send_file('/' + path[len('/file/'):])
         if path.startswith('/html/'):
             return self._send_file(os.path.join(HTML_DIR, os.path.basename(path)))
+        if path == '/bg/':
+            return self._reply(200, {'backgrounds': [{'id': b['id'], 'label': b['label'], 'url': '/bg/' + b['id']} for b in list_backgrounds()]})
+        if path.startswith('/bg/'):
+            p = background_path(path[len('/bg/'):])
+            return self._send_file(p) if p else self._reply(404, {'ok': False})
         if path.startswith(('/chat/', '/vendor/', '/icon/')):
             full = os.path.normpath(os.path.join(HERE, path.lstrip('/')))
             if full.startswith(HERE):
@@ -1349,6 +1380,7 @@ class Core:
             save_config(self.cfg)
         self.session = None
         self.listeners = []
+        os.makedirs(BG_USER, exist_ok=True)              # Ordner für eigene Hintergrundbilder
         self.profile, self.profile_body, self.profile_created = load_profile(self.cfg['cwd'])
         self.profile_loaded_at = self.profile_mtime()
         self.history = self.make_history()
@@ -1457,6 +1489,7 @@ class Core:
                 'profile': PROFILE_NAME if os.path.exists(os.path.join(self.cfg['cwd'], PROFILE_NAME)) else '',
                 'replay': [{'role': r, 'time': t, 'text': x} for r, t, x in self.history.recent_turns()] if replay else [],
                 'ragmode': self.rag_mode(), 'ragfiles': ragfiles, 'think': self.think_mode(),
+                'background': self.cfg.get('background', ''), 'background_dim': self.cfg.get('background_dim', 0.5),
                 'note': note}
 
     def model_choices(self, local=True):
@@ -1561,6 +1594,10 @@ class Core:
         if rag and rag.exists():
             threading.Thread(target=self.rag_refresh, args=(rag,), daemon=True).start()
         return rag
+
+    def apply_background(self):
+        """Oberfläche-spezifisch (natives Fenster: Terminal-Hintergrund); Standard: nichts."""
+        return None
 
     def think_mode(self):
         v = str(self.profile.get('think', 'auto')).lower()
@@ -1693,6 +1730,11 @@ class Core:
             self.chat_event({'type': 'status', 'text': 'Neuer Chat (ohne Fortsetzung der alten Claude-Sitzung) · Ordner: ' + self.cfg['cwd']})
         elif cmd == 'refresh_models':
             self.refresh_models_async()
+        elif cmd == 'set_background':
+            self.cfg['background'] = data.get('value') or ''
+            self.cfg['background_dim'] = float(data.get('dim', 0.5) or 0)
+            save_config(self.cfg)
+            self.apply_background()
         elif cmd == 'set_think':
             self.set_think_mode(data.get('value', 'auto'))
         elif cmd == 'set_ragmode':
@@ -1873,6 +1915,10 @@ class NativeMixin(Core):
         self.connect('key-press-event', self.on_key)
         self.connect('size-allocate', self.on_size)      # Fenstergröße laufend merken
 
+        screen = self.get_screen()
+        visual = screen.get_rgba_visual()
+        if visual and screen.is_composited():
+            self.set_visual(visual)                       # nötig, damit das Terminal durchscheinen kann
         self.notebook = Gtk.Notebook()
         self.notebook.set_scrollable(True)
         self.notebook.connect('page-removed', self.on_page_removed)
@@ -1882,6 +1928,7 @@ class NativeMixin(Core):
         self.notebook.append_page(self.web, Gtk.Label(label='Chat'))
         self.set_title('RichTerm — ' + self.cfg['cwd'].replace(HOME, '~'))
         self.show_all()
+        self.apply_background()
 
     def build_chat(self):
         settings = WebKit2.Settings()
@@ -1907,6 +1954,39 @@ class NativeMixin(Core):
 
     def ui(self, fn, *args):
         GLib.idle_add(fn, *args)
+
+    def apply_background(self):
+        """Hintergrundbild hinter die Terminal-Tabs legen; das Terminal wird leicht durchscheinend."""
+        bg = self.cfg.get('background') or ''
+        path = background_path(bg) if bg else None
+        dim = float(self.cfg.get('background_dim', 0.5) or 0)
+        css = ''
+        if path:
+            # Abdunklung als Verlauf über dem Bild, damit Text lesbar bleibt
+            css = ('window.richterm-bg { background-image: linear-gradient(rgba(0,0,0,%.2f), rgba(0,0,0,%.2f)), url("file://%s"); '
+                   'background-size: cover; background-position: center; } '
+                   'window.richterm-bg notebook, window.richterm-bg notebook > stack, window.richterm-bg scrolledwindow, window.richterm-bg header { background: transparent; }'
+                   % (dim, dim, path))
+        if not hasattr(self, '_bg_css'):
+            self._bg_css = Gtk.CssProvider()
+            Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(), self._bg_css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        try:
+            self._bg_css.load_from_data(css.encode('utf-8'))
+        except Exception:  # noqa: BLE001
+            pass
+        ctx = self.get_style_context()
+        if path:
+            ctx.add_class('richterm-bg')
+        else:
+            ctx.remove_class('richterm-bg')
+        alpha = 0.78 if path else 1.0
+        for i in range(self.notebook.get_n_pages()):
+            t = getattr(self.notebook.get_nth_page(i), 'term', None)
+            if t:
+                c = rgba(PALETTE['bg']); c.alpha = alpha
+                t.set_color_background(c)
+                t.set_clear_background(not path)
+        return None
 
     def chat_event(self, ev):
         if ev.get('type') == 'ready':
@@ -1956,6 +2036,10 @@ class NativeMixin(Core):
         term.set_mouse_autohide(True)
         term.set_allow_hyperlink(True)
         term.set_colors(rgba(PALETTE['fg']), rgba(PALETTE['bg']), [rgba(c) for c in PALETTE['colors']])
+        if self.cfg.get('background'):
+            c = rgba(PALETTE['bg']); c.alpha = 0.78
+            term.set_color_background(c)
+            term.set_clear_background(False)
         term.connect('child-exited', lambda t, status: self.close_terminal(t))
         term.connect('window-title-changed', self.on_title_changed)
         term.connect('button-press-event', self.on_term_click)

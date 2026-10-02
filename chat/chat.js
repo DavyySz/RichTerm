@@ -73,6 +73,30 @@
   function setStatus(s) { statusText.textContent = s || ''; }
   function setBusy(b) { busy = b; $('btn-stop').hidden = !b; $('btn-send').hidden = b; }
 
+  // ---------- Hintergrundbild ----------
+  let bgId = '', bgDim = 0.5;
+  function applyBackground() {
+    const layer = $('bg-layer');
+    document.body.classList.toggle('has-bg', !!bgId);
+    layer.style.backgroundImage = bgId ? 'url("/bg/' + encodeURIComponent(bgId).replace(/%2F/g, '/') + '")' : '';
+    document.documentElement.style.setProperty('--bg-dim', bgDim);
+    $('bg-dim').hidden = !bgId;
+    $('bg-dim').value = Math.round(bgDim * 100);
+    $('bg').value = bgId;
+  }
+  async function loadBackgrounds() {
+    try {
+      const r = await fetch('/bg/'); const j = await r.json();
+      const sel = $('bg');
+      sel.innerHTML = '<option value="">Hintergrund: Standard</option>';
+      for (const b of j.backgrounds || []) { const o = document.createElement('option'); o.value = b.id; o.textContent = b.label; sel.appendChild(o); }
+      sel.value = bgId;
+    } catch (e) { /* kein Server (sollte nicht passieren) */ }
+  }
+  $('bg').onchange = () => { bgId = $('bg').value; applyBackground(); send({ cmd: 'set_background', value: bgId, dim: bgDim }); };
+  $('bg-dim').oninput = () => { bgDim = $('bg-dim').value / 100; applyBackground(); };
+  $('bg-dim').onchange = () => send({ cmd: 'set_background', value: bgId, dim: bgDim });
+
   // ---------- Modellmenü ----------
   function fillModels(models, current) {
     const sel = $('model');
@@ -404,6 +428,7 @@
         cwd = ev.cwd; $('cwd').textContent = ev.cwd.replace(ev.home, '~');
         window.RT_USER = ev.user;
         fillModels(ev.models || [], ev.current || 'claude:');
+        if (ev.background !== undefined) { bgId = ev.background || ''; bgDim = parseFloat(ev.background_dim ?? 0.5); loadBackgrounds().then(applyBackground); }
         $('ragmode').value = ev.ragmode || 'on';
         $('think').value = ev.think || 'auto';
         $('think').hidden = ev.backend !== 'command';     // nur bei lokalen Modellen sinnvoll

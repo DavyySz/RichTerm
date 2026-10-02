@@ -42,7 +42,7 @@ button, select, textarea { font-family: "DejaVu Sans", system-ui, sans-serif; }
 
 /* Kopfzeile */
 #bar {
-  display: flex; align-items: center; gap: 8px; padding: 7px 12px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 6px 12px;
   border-bottom: 1px solid var(--rule); background: var(--surface); font-size: 13px; flex: none;
 }
 #bar .spacer { flex: 1; }
@@ -50,7 +50,7 @@ button, select, textarea { font-family: "DejaVu Sans", system-ui, sans-serif; }
   background: var(--surface-2); color: var(--ink); border: 1px solid var(--rule-strong);
   border-radius: 5px; padding: 4px 10px; font-size: 13px; cursor: pointer; white-space: nowrap; flex: none;
 }
-#btn-folder { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; max-width: 46%; direction: rtl; text-align: left; }
+#btn-folder { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; max-width: 38%; direction: rtl; text-align: left; }
 #btn-folder #cwd { direction: ltr; unicode-bidi: embed; }
 #bar button:hover, #bar select:hover { border-color: var(--accent); }
 #cwd { font-family: "DejaVu Sans Mono", monospace; }
@@ -192,3 +192,19 @@ button:focus-visible, select:focus-visible, textarea:focus-visible, input:focus-
 .thinking-box summary::before { content: '▸ '; }
 .thinking-box[open] summary::before { content: '▾ '; }
 .thinking-text { white-space: pre-wrap; margin-top: 4px; max-height: 260px; overflow: auto; font-size: 12px; }
+
+/* Hintergrundbild: Bild + Abdunklung in einer festen Ebene hinter allem; Textflächen werden durchscheinend */
+#bg-layer { position: fixed; inset: 0; z-index: -1; background-size: cover; background-position: center; display: none; }
+#bg-layer::after { content: ''; position: absolute; inset: 0; background: rgba(0, 0, 0, var(--bg-dim, 0.5)); }
+:root[data-theme="light"] #bg-layer::after { background: rgba(255, 255, 255, var(--bg-dim, 0.5)); }
+body.has-bg { background: transparent; }
+body.has-bg #bg-layer { display: block; }
+body.has-bg #bar, body.has-bg #composer { background: color-mix(in srgb, var(--surface) 80%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+body.has-bg .msg.assistant .bubble { background: color-mix(in srgb, var(--surface) 82%, transparent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-radius: 12px; padding: 12px 18px; border: 1px solid var(--rule); }
+body.has-bg .msg.user .bubble { background: color-mix(in srgb, var(--user) 88%, transparent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+body.has-bg .replay-sep, body.has-bg .sources, body.has-bg .welcome { text-shadow: 0 1px 3px rgba(0,0,0,0.6); }
+body.has-bg .welcome p, body.has-bg .welcome h1 { color: #f2f0eb; }
+:root[data-theme="light"] body.has-bg .welcome p, :root[data-theme="light"] body.has-bg .welcome h1 { color: #1d2126; text-shadow: 0 1px 3px rgba(255,255,255,0.7); }
+body.has-bg .tool { background: color-mix(in srgb, var(--surface) 70%, transparent); border-radius: 0 6px 6px 0; }
+#bg-dim { width: 90px; accent-color: var(--accent); }
+#bg-dim[hidden] { display: none; }

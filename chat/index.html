@@ -41,10 +41,13 @@
   </select>
   <button id="btn-profile" title="Profil dieses Ordners (richterm.md) im Editor öffnen">Profil</button>
   <button id="btn-reload" title="Profil neu laden (nach dem Bearbeiten)">Neu laden</button>
+  <select id="bg" title="Hintergrundbild (eigene Bilder: ~/.config/richterm/backgrounds/)"><option value="">Hintergrund: Standard</option></select>
+  <input id="bg-dim" type="range" min="0" max="85" value="50" title="Abdunklung des Hintergrunds" hidden>
   <button id="btn-theme" title="Hell/Dunkel">☾</button>
   <button id="btn-new" title="Neuen Chat beginnen">Neuer Chat</button>
 </header>
 
+<div id="bg-layer"></div>
 <main id="messages">
   <div class="welcome" id="welcome">
     <img class="logo" src="../icon/richterm-128.png" alt="" width="96" height="96">

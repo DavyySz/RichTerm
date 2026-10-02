@@ -170,6 +170,14 @@ Bei HTML-Vorschauen: **Code** zeigt den Quelltext, **Im Browser** öffnet die Se
 Kopfzeile: Modell (Standard/Opus/Sonnet/Haiku), Berechtigungen, ☀/☾ hell/dunkel.
 Ctrl + Plus/Minus ändert die Schriftgröße im Chat.
 
+## Hintergrundbilder
+
+Im Menü **Hintergrund** in der Kopfzeile: Standard (grau) oder eines der mitgelieferten Fotos (Nebelwald, Nebelberge,
+Nebelhügel, Herbstwald, Nachthimmel, Nordlicht, Wüste bei Nacht; alle gemeinfrei/CC0, Nachweise in
+`backgrounds/ATTRIBUTION.md`). Der Regler daneben dunkelt das Bild ab (im hellen Modus hellt er auf), damit Text lesbar
+bleibt; Textflächen werden leicht durchscheinend. Eigene Bilder (JPG/PNG/WebP) nach `~/.config/richterm/backgrounds/`
+legen, sie erscheinen im Menü als „Eigenes Bild“. Im nativen Fenster liegt das Bild auch hinter den Terminal-Tabs.
+
 ## Terminal
 
 | Taste | Wirkung |
