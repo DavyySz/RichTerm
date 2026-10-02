@@ -1921,11 +1921,14 @@ class NativeMixin(Core):
             self.set_visual(visual)                       # nötig, damit das Terminal durchscheinen kann
         self.notebook = Gtk.Notebook()
         self.notebook.set_scrollable(True)
+        self.notebook.set_show_border(False)
         self.notebook.connect('page-removed', self.on_page_removed)
+        self.notebook.connect('page-added', lambda nb, *a: nb.set_show_tabs(nb.get_n_pages() > 1))
         self.add(self.notebook)
 
         self.web = self.build_chat()
         self.notebook.append_page(self.web, Gtk.Label(label='Chat'))
+        self.notebook.set_show_tabs(False)                # Tab-Leiste erst, wenn ein Terminal dazukommt
         self.set_title('RichTerm — ' + self.cfg['cwd'].replace(HOME, '~'))
         self.show_all()
         self.apply_background()
@@ -1965,7 +1968,8 @@ class NativeMixin(Core):
             # Abdunklung als Verlauf über dem Bild, damit Text lesbar bleibt
             css = ('window.richterm-bg { background-image: linear-gradient(rgba(0,0,0,%.2f), rgba(0,0,0,%.2f)), url("file://%s"); '
                    'background-size: cover; background-position: center; } '
-                   'window.richterm-bg notebook, window.richterm-bg notebook > stack, window.richterm-bg scrolledwindow, window.richterm-bg header { background: transparent; }'
+                   'window.richterm-bg notebook, window.richterm-bg notebook > stack, window.richterm-bg scrolledwindow { background: transparent; } '
+                   'window.richterm-bg notebook > header { background: rgba(43,46,51,0.92); }'
                    % (dim, dim, path))
         if not hasattr(self, '_bg_css'):
             self._bg_css = Gtk.CssProvider()
@@ -2079,6 +2083,8 @@ class NativeMixin(Core):
     def on_page_removed(self, nb, child, idx):
         if nb.get_n_pages() == 0:
             self.on_quit()
+        else:
+            nb.set_show_tabs(nb.get_n_pages() > 1)
 
     def on_title_changed(self, term):
         for i in range(self.notebook.get_n_pages()):

@@ -598,10 +598,13 @@
     attachments = []; renderAttachments();
   }
   function autosize() {
-    // Höhe an den Inhalt anpassen: erst zurücksetzen, dann auf die Inhaltshöhe setzen (max. 40 % des Fensters)
+    // Höhe an den Inhalt anpassen (max. 40 % des Fensters); leer = eine Zeile
+    if (!input.value) { input.style.height = ''; input.scrollTop = 0; return; }
     input.style.height = '0px';
-    const h = Math.min(input.scrollHeight, Math.floor(window.innerHeight * 0.4));
+    const max = Math.floor(window.innerHeight * 0.4);
+    const h = Math.min(input.scrollHeight, max);
     input.style.height = Math.max(h, 42) + 'px';
+    input.style.overflowY = input.scrollHeight > max ? 'auto' : 'hidden';
   }
   input.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
