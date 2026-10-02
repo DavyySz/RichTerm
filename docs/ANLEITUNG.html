@@ -93,7 +93,7 @@ richterm                        # RichTerm öffnet sich mit diesem Ordner</code>
   <tr><td>Statuszeile</td><td>Über dem Eingabefeld: Ordner, Sitzung, Dauer und Kosten der letzten Antwort, Hinweise.</td></tr>
 </table>
 <h3>Anhänge: Bilder und Dateien</h3>
-<p>Bilder (Screenshot einer Folie, Foto vom Tafelanschrieb), PDFs und andere Dateien kannst du an eine Frage anhängen: <b>in das Fenster ziehen</b>, mit <span class="kbd">Ctrl+V</span> <b>einfügen</b> (z. B. einen Screenshot) oder über die <b>📎</b>-Schaltfläche wählen. Die Anhänge erscheinen als kleine Chips über dem Eingabefeld (✕ entfernt sie) und werden mit der nächsten Nachricht gesendet. Claude sieht Bilder direkt (es kann also eine handschriftliche Rechnung lesen und korrigieren); andere Dateien liest es mit seinem Read-Werkzeug. Eingefügte Dateien werden im Arbeitsordner unter <code>richterm-anhang/</code> abgelegt; aus dem Dateimanager gezogene Dateien bleiben, wo sie sind.</p>
+<p>Bilder (Screenshot einer Folie, Foto vom Tafelanschrieb), PDFs und andere Dateien kannst du an eine Frage anhängen: <b>in das Fenster ziehen</b>, mit <span class="kbd">Ctrl+V</span> <b>einfügen</b> (z. B. einen Screenshot) oder über die <b>📎</b>-Schaltfläche wählen. Die Anhänge erscheinen als kleine Chips über dem Eingabefeld (✕ entfernt sie) und werden mit der nächsten Nachricht gesendet. Claude sieht Bilder direkt (es kann also eine handschriftliche Rechnung lesen und korrigieren); andere Dateien liest es mit seinem Read-Werkzeug. Es gibt kein Größenlimit. Alles, was du einfügst oder hineinziehst, wird nach <code>rag/self_data/</code> im Arbeitsordner kopiert und dort mit indexiert, steht also auch späteren Fragen zur Verfügung (Abschnitt 6). Sehr große Bilder werden für die Übertragung an das Modell verkleinert.</p>
 <h3>Unter jeder Antwort</h3>
 <ul>
   <li><b>Einfacher · Kürzer · Beispiel · Abfragen:</b> Schnellaktionen. Ein Klick stellt die passende Folgefrage („Abfragen“ lässt dich die KI mit Prüfungsfragen abfragen).</li>
@@ -271,7 +271,7 @@ rt --help                               # alle Möglichkeiten</code></pre>
   <tr><td><code>&lt;Arbeitsordner&gt;/richterm-verlauf.md</code></td><td>Gedächtnis; <code>richterm-verlauf.archiv.md</code> = verdichtete Rohteile.</td></tr>
   <tr><td><code>&lt;Arbeitsordner&gt;/rag/</code></td><td>Unterlagen, aus denen die KI schöpft (plus Index <code>.richterm-index.json</code>).</td></tr>
   <tr><td><code>&lt;Arbeitsordner&gt;/lernzettel/</code></td><td>Gespeicherte Antworten (Markdown).</td></tr>
-  <tr><td><code>&lt;Arbeitsordner&gt;/richterm-anhang/</code></td><td>Eingefügte Bilder und Dateien.</td></tr>
+  <tr><td><code>&lt;Arbeitsordner&gt;/rag/self_data/</code></td><td>Eingefügte Bilder, Screenshots und Dateien.</td></tr>
   <tr><td><code>~/.config/richterm.json</code></td><td>Fenstergröße, Schrift, letzter Ordner, gemerkte Claude-Sitzungen pro Ordner.</td></tr>
   <tr><td><code>~/.cache/richterm/html/</code></td><td>Abgelegte HTML-Vorschauen (kann gelöscht werden).</td></tr>
   <tr><td><code>~/.local/share/ollama/</code></td><td>Eigenes Ollama (<code>dist/</code>) und Modelle (<code>models/</code>).</td></tr>

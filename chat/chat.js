@@ -547,7 +547,7 @@
       if (a.mime && a.mime.startsWith('image/') && a.data) {
         const img = document.createElement('img'); img.src = a.data; chip.appendChild(img);
       } else { chip.appendChild(document.createTextNode('📄 ')); }
-      chip.appendChild(document.createTextNode(a.name));
+      chip.appendChild(document.createTextNode(a.name + (a.pending ? ' …' : '')));
       const x = document.createElement('button'); x.textContent = '✕'; x.title = 'Entfernen';
       x.onclick = () => { attachments.splice(i, 1); renderAttachments(); };
       chip.appendChild(x);
@@ -555,12 +555,22 @@
     });
     box.hidden = attachments.length === 0;
   }
-  function addFile(file) {
+  async function addFile(file) {
+    // Datei sofort an den eingebauten Server hochladen (gestreamt, kein Größenlimit) -> rag/self_data/
     if (!file) return;
-    if (file.size > 25 * 1024 * 1024) { setStatus('Datei zu groß (max. 25 MB): ' + file.name); return; }
-    const reader = new FileReader();
-    reader.onload = () => { attachments.push({ name: file.name || 'bild.png', mime: file.type || 'application/octet-stream', data: reader.result }); renderAttachments(); };
-    reader.readAsDataURL(file);
+    const name = file.name || (file.type.startsWith('image/') ? 'screenshot.png' : 'anhang');
+    const entry = { name, mime: file.type || 'application/octet-stream', path: '', pending: true };
+    if (file.type.startsWith('image/')) entry.data = URL.createObjectURL(file);   // nur Vorschau-Chip
+    attachments.push(entry); renderAttachments();
+    try {
+      const r = await fetch('/upload?name=' + encodeURIComponent(name), { method: 'POST', body: file });
+      const j = await r.json();
+      entry.path = 'file://' + j.path; entry.name = j.name; entry.pending = false;
+    } catch (e) {
+      setStatus('Hochladen fehlgeschlagen: ' + name);
+      attachments.splice(attachments.indexOf(entry), 1);
+    }
+    renderAttachments();
   }
   function addPaths(uriList) {
     for (const line of uriList.split(/\r?\n/)) {
@@ -593,8 +603,9 @@
   function submit() {
     const text = input.value.trim();
     if ((!text && !attachments.length) || busy) return;
+    if (attachments.some(a => a.pending)) { setStatus('Anhänge werden noch hochgeladen …'); return; }
     input.value = ''; autosize();
-    send({ cmd: 'send', text, attachments });
+    send({ cmd: 'send', text, attachments: attachments.map(a => ({ name: a.name, mime: a.mime, path: a.path })) });
     attachments = []; renderAttachments();
   }
   function autosize() {

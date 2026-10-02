@@ -160,7 +160,9 @@ nur das Claude-Backend.
 3. Will Claude ein Werkzeug benutzen (Datei schreiben, Befehl ausführen), erscheint eine Frage im Chat
    mit **Erlauben / Ablehnen**. Mit dem Menü „Berechtigungen“ lässt sich das vorab einstellen.
 4. **■** bricht eine laufende Antwort ab. **Neuer Chat** beginnt eine frische Sitzung.
-5. **Anhänge:** Bilder und Dateien ins Fenster ziehen, mit Ctrl+V einfügen oder über 📎 wählen. Claude sieht Bilder direkt.
+5. **Anhänge:** Bilder, Screenshots und Dateien ins Fenster ziehen, mit Ctrl+V einfügen oder über 📎 wählen, ohne
+   Größenlimit. Alles landet in `rag/self_data/` im Arbeitsordner (wird mit indexiert, steht also auch späteren Fragen
+   zur Verfügung). Claude sieht Bilder direkt; sehr große Bilder werden für die Übertragung verkleinert.
 6. **Unter jeder Antwort:** Schnellaktionen (Einfacher · Kürzer · Beispiel · Abfragen) und **Lernzettel speichern**
    (legt die Antwort als Markdown in `lernzettel/` ab). An Codeblöcken: **Kopieren**.
 

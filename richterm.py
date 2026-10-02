@@ -1334,6 +1334,23 @@ class Receiver(BaseHTTPRequestHandler):
 
     def do_POST(self):
         n = int(self.headers.get('Content-Length', 0))
+        if self.path.startswith('/upload'):             # Datei aus dem Chat: gestreamt nach rag/self_data/ (kein Limit)
+            import re
+            from urllib.parse import parse_qs
+            name = os.path.basename(parse_qs(urlparse(self.path).query).get('name', ['anhang'])[0]) or 'anhang'
+            folder = self.app.self_data_dir()
+            os.makedirs(folder, exist_ok=True)
+            safe = re.sub(r'[^\w.\- ]+', '_', name)
+            path = os.path.join(folder, '%s-%s' % (datetime.datetime.now().strftime('%Y%m%d-%H%M%S'), safe))
+            remaining = n
+            with open(path, 'wb') as fh:
+                while remaining > 0:
+                    chunk = self.rfile.read(min(1 << 20, remaining))
+                    if not chunk:
+                        break
+                    fh.write(chunk)
+                    remaining -= len(chunk)
+            return self._reply(200, {'ok': True, 'path': path, 'name': safe})
         raw = self.rfile.read(n).decode('utf-8', 'replace')
         if self.path == '/store':                       # HTML-Block aus dem Chat ablegen
             return self._reply(200, {'ok': True, 'url': self.store_html(raw)})
@@ -1788,14 +1805,17 @@ class Core:
             if url:
                 self.open_uri(self.base_url + url if url.startswith('/') else url)
 
+    def self_data_dir(self):
+        """Ablage für eingefügte Bilder und Dateien: rag/self_data/ (wird mit indexiert)."""
+        return os.path.join(self.cfg['cwd'], (self.profile.get('rag_dir') or RAG_DIRNAME), 'self_data')
+
     def store_attachments(self, attachments):
-        """Anhänge (Bilder, PDFs, Dateien) im Arbeitsordner unter richterm-anhang/ ablegen.
-        Gibt (Textzusatz, Bildblöcke) zurück."""
+        """Anhänge (Bilder, PDFs, Dateien) nach rag/self_data/ legen. Gibt (Textzusatz, Bildblöcke) zurück."""
         import base64
         import re
         import urllib.parse
         notes, blocks = [], []
-        folder = os.path.join(self.cfg['cwd'], 'richterm-anhang')
+        folder = self.self_data_dir()
         for a in attachments or []:
             name = os.path.basename(a.get('name') or 'anhang')
             mime = a.get('mime') or mimetypes.guess_type(name)[0] or 'application/octet-stream'
@@ -1804,7 +1824,17 @@ class Core:
                 src_path = urllib.parse.unquote(src_path[7:])
             data = None
             if src_path and os.path.isfile(src_path):
-                path = src_path                       # Datei liegt schon auf der Platte: direkt verwenden
+                path = src_path
+                if not os.path.abspath(path).startswith(os.path.abspath(folder)):
+                    # aus dem Dateimanager gezogen: Kopie nach self_data, Original bleibt
+                    os.makedirs(folder, exist_ok=True)
+                    stamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
+                    dest = os.path.join(folder, '%s-%s' % (stamp, re.sub(r'[^\w.\- ]+', '_', os.path.basename(path))))
+                    try:
+                        shutil.copy2(path, dest)
+                        path = dest
+                    except OSError:
+                        pass
                 if mime.startswith('image/'):
                     with open(path, 'rb') as fh:
                         data = base64.b64encode(fh.read()).decode('ascii')
@@ -1821,11 +1851,36 @@ class Core:
                     data = raw
             rel = os.path.relpath(path, self.cfg['cwd'])
             if mime.startswith('image/') and data:
+                # Claude bekommt Bilder direkt; sehr große Bilder vorher verkleinern (API-Grenze ~5 MB)
+                if len(data) > 4_500_000:
+                    data, mime = self.shrink_image(path) or (data, mime)
                 blocks.append({'type': 'image', 'source': {'type': 'base64', 'media_type': mime, 'data': data}})
                 notes.append('[Bild angehängt: %s]' % rel)
             else:
                 notes.append('[Datei angehängt: %s — lies sie bei Bedarf mit dem Read-Werkzeug]' % rel)
+        if attachments and self.rag and self.rag.exists():
+            threading.Thread(target=self.rag_refresh, daemon=True).start()   # neue Dateien mit indexieren
         return ('\n'.join(notes), blocks)
+
+    @staticmethod
+    def shrink_image(path, max_px=2000):
+        """Großes Bild für die Übertragung an das Modell verkleinern (GdkPixbuf, falls vorhanden)."""
+        try:
+            import base64
+            import gi
+            gi.require_version('GdkPixbuf', '2.0')
+            from gi.repository import GdkPixbuf
+            pb = GdkPixbuf.Pixbuf.new_from_file(path)
+            w, h = pb.get_width(), pb.get_height()
+            f = min(1.0, max_px / max(w, h))
+            if f < 1.0:
+                pb = pb.scale_simple(int(w * f), int(h * f), GdkPixbuf.InterpType.BILINEAR)
+            ok, buf = pb.save_to_bufferv('jpeg', ['quality'], ['85'])
+            if ok:
+                return base64.b64encode(bytes(buf)).decode('ascii'), 'image/jpeg'
+        except Exception:  # noqa: BLE001
+            return None
+        return None
 
     def send_to_claude(self, text, attachments=None):
         if not text.strip() and not attachments:
