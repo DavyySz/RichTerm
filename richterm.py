@@ -2136,9 +2136,23 @@ class NativeMixin(Core):
         return None
 
     def chat_event(self, ev):
+        """Ereignisse sammeln und gebündelt (alle 30 ms) an die Seite geben: ein Prozessaufruf statt Dutzende
+        pro Sekunde beim Streamen, der GTK-Hauptthread bleibt frei für das Fenster."""
         if ev.get('type') == 'ready':
             self.refresh_models_async()
-        js = 'window.chatEvent(JSON.parse(%s));' % json.dumps(json.dumps(ev))
+        if not hasattr(self, '_ev_queue'):
+            self._ev_queue, self._ev_flush = [], None
+        self._ev_queue.append(ev)
+        if self._ev_flush is None:
+            self._ev_flush = GLib.timeout_add(30, self._flush_events)
+        return False
+
+    def _flush_events(self):
+        self._ev_flush = None
+        batch, self._ev_queue = self._ev_queue, []
+        if not batch:
+            return False
+        js = 'for (const e of JSON.parse(%s)) window.chatEvent(e);' % json.dumps(json.dumps(batch))
         if hasattr(self.web, 'evaluate_javascript'):
             self.web.evaluate_javascript(js, -1, None, None, None, None, None)
         else:

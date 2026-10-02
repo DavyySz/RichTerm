@@ -29,7 +29,11 @@
     const es = new EventSource('/events');
     let opened = false;
     es.onopen = () => { if (!opened) { opened = true; onReady(); } };
-    es.onmessage = (e) => { try { window.chatEvent(JSON.parse(e.data)); } catch (err) { console.error(err); } };
+    let batch = [], flushing = false;
+    es.onmessage = (e) => {
+      try { batch.push(JSON.parse(e.data)); } catch (err) { console.error(err); return; }
+      if (!flushing) { flushing = true; requestAnimationFrame(() => { const b = batch; batch = []; flushing = false; for (const ev of b) window.chatEvent(ev); }); }
+    };
     es.onerror = () => setStatus('Verbindung unterbrochen … versuche erneut');
   }
 
