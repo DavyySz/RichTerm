@@ -2076,6 +2076,10 @@ class NativeMixin(Core):
         settings = WebKit2.Settings()
         settings.set_enable_javascript(True)
         settings.set_enable_developer_extras(True)
+        try:
+            settings.set_hardware_acceleration_policy(WebKit2.HardwareAccelerationPolicy.ALWAYS)   # flüssiges Scrollen/Blur
+        except Exception:  # noqa: BLE001
+            pass
         ucm = WebKit2.UserContentManager()
         ucm.register_script_message_handler('app')
         ucm.connect('script-message-received::app', self.on_js_message)

@@ -63,7 +63,10 @@
     localStorage.setItem('rt-theme', theme); localStorage.setItem('rt-font', fontSize);
   }
   function nearBottom() { return messages.scrollHeight - messages.scrollTop - messages.clientHeight < 120; }
-  function scrollDown(force) { if (force || nearBottom()) messages.scrollTop = messages.scrollHeight; }
+  function scrollDown(force, instant) {
+    if (!(force || nearBottom())) return;
+    messages.scrollTo({ top: messages.scrollHeight, behavior: instant ? 'instant' : 'smooth' });
+  }
   function toUrl(p) {
     if (/^(https?:|data:|\/file\/|\/html\/)/.test(p)) return p;
     if (p.startsWith('file://')) return '/file' + p.slice(7);
@@ -150,7 +153,7 @@
   // ---------- Markdown → HTML mit Formeln, Diagrammen, Vorschauen ----------
   const MATH_RE = /\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$(?!\s)[^$\n]+?(?<!\s)\$/g;
 
-  function renderMarkdown(src, target, final = true) {
+  function renderMarkdown(src, target, final = true, withMath = true) {
     const stash = [];
     // Formeln vor dem Markdown-Parser schützen; Codeblöcke bleiben, wie sie sind
     const protectedSrc = src.replace(/(```[\s\S]*?```)|(`[^`\n]+`)|(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$(?!\s)[^$\n]+?(?<!\s)\$)/g,
@@ -182,7 +185,7 @@
     let html = marked.parse(protectedSrc, { gfm: true, breaks: false, renderer });
     html = html.replace(/\u0000M(\d+)\u0000/g, (_, i) => escapeHtml(stash[+i]));
     target.innerHTML = html;
-    renderMathInElement(target, {
+    if (final || withMath) renderMathInElement(target, {
       delimiters: [
         { left: '$$', right: '$$', display: true }, { left: '\\[', right: '\\]', display: true },
         { left: '\\(', right: '\\)', display: false }, { left: '$', right: '$', display: false },
@@ -336,14 +339,22 @@
     return current;
   }
 
-  let renderTimer = null;
+  let renderTimer = null, lastRenderCost = 0, lastMathRender = 0;
   function scheduleRender(block) {
     if (renderTimer) return;
+    // Intervall an die Kosten des letzten Renderns anpassen: lange Antworten seltener neu zeichnen
+    const delay = Math.min(600, Math.max(120, lastRenderCost * 4));
     renderTimer = setTimeout(() => {
       renderTimer = null;
-      if (block.el && !block.done) renderMarkdown(block.text, block.el, false);
-      scrollDown();
-    }, 60);
+      if (block.el && !block.done) {
+        const t0 = performance.now();
+        const withMath = (t0 - lastMathRender) > 1000;      // Formeln höchstens einmal pro Sekunde setzen
+        renderMarkdown(block.text, block.el, false, withMath);
+        if (withMath) lastMathRender = t0;
+        lastRenderCost = performance.now() - t0;
+      }
+      scrollDown(false, true);
+    }, delay);
   }
   function cancelRender() { if (renderTimer) { clearTimeout(renderTimer); renderTimer = null; } }
   function finalizeBlock(b) {
