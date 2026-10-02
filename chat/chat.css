@@ -223,8 +223,8 @@ body.has-bg { background: transparent; }
 body.has-bg #bg-layer { display: block; }
 body.has-bg #bar { background: color-mix(in srgb, var(--surface) 72%, transparent); }
 body.has-bg #composer .card { background: color-mix(in srgb, var(--surface) 80%, transparent); }
-body.has-bg .msg.assistant .bubble { background: color-mix(in srgb, var(--surface) 82%, transparent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-radius: 12px; padding: 12px 18px; border: 1px solid var(--rule); }
-body.has-bg .msg.user .bubble { background: color-mix(in srgb, var(--user) 88%, transparent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+body.has-bg .msg.assistant .bubble { background: color-mix(in srgb, var(--surface) 72%, transparent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-radius: 12px; padding: 12px 18px; border: 1px solid var(--rule); }
+body.has-bg .msg.user .bubble { background: color-mix(in srgb, var(--user) 80%, transparent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
 body.has-bg .replay-sep, body.has-bg .sources, body.has-bg .welcome { text-shadow: 0 1px 3px rgba(0,0,0,0.6); }
 body.has-bg .welcome p, body.has-bg .welcome h1 { color: #f2f0eb; }
 :root[data-theme="light"] body.has-bg .welcome p, :root[data-theme="light"] body.has-bg .welcome h1 { color: #1d2126; text-shadow: 0 1px 3px rgba(255,255,255,0.7); }
