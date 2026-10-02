@@ -2173,11 +2173,44 @@ class NativeMixin(Core):
                 t.set_font(fd)
         self.cfg['font'] = fd.to_string()
 
+    def paste_from_clipboard(self):
+        """Strg+V im Chat: Bild oder Dateien aus der GTK-Zwischenablage als Anhang übernehmen.
+        (WebKitGTK reicht Bilder beim Einfügen nicht an die Seite weiter.) -> True, wenn etwas übernommen wurde."""
+        import re
+        import urllib.parse
+        cb = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
+        folder = self.self_data_dir()
+        stamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
+        if cb.wait_is_image_available():
+            pb = cb.wait_for_image()
+            if pb:
+                os.makedirs(folder, exist_ok=True)
+                path = os.path.join(folder, '%s-screenshot.png' % stamp)
+                pb.savev(path, 'png', [], [])
+                self.chat_event({'type': 'attachment', 'name': os.path.basename(path), 'mime': 'image/png', 'path': 'file://' + path})
+                return True
+        if cb.wait_is_uris_available():
+            uris = cb.wait_for_uris() or []
+            added = False
+            for u in uris:
+                if u.startswith('file://'):
+                    p = urllib.parse.unquote(u[7:])
+                    if os.path.isfile(p):
+                        mime = mimetypes.guess_type(p)[0] or 'application/octet-stream'
+                        self.chat_event({'type': 'attachment', 'name': os.path.basename(p), 'mime': mime, 'path': 'file://' + p})
+                        added = True
+            return added
+        return False
+
     def on_key(self, widget, event):
         ctrl = event.state & Gdk.ModifierType.CONTROL_MASK
         shift = event.state & Gdk.ModifierType.SHIFT_MASK
         key = Gdk.keyval_name(event.keyval) or ''
         term = self.current_term()
+        if ctrl and not shift and key.lower() == 'v' and term is None:
+            # im Chat: Bild/Dateien aus der Zwischenablage anhängen; Text wird normal eingefügt
+            if self.paste_from_clipboard():
+                return True
         if ctrl and shift:
             k = key.lower()
             if k == 't':

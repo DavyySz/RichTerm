@@ -457,6 +457,13 @@
         setStatus(ev.note || '');
         break;
       case 'card': addCard(ev.msg); break;
+      case 'attachment': {   // vom nativen Fenster aus der Zwischenablage (Strg+V) oder per Drag&Drop
+        const a = { name: ev.name, mime: ev.mime || '', path: ev.path, pending: false };
+        if (a.mime.startsWith('image/')) a.data = toUrl(ev.path);
+        attachments.push(a); renderAttachments(); input.focus();
+        setStatus('Angehängt: ' + ev.name);
+        break;
+      }
       case 'ask_folder': {
         const p = window.prompt('Arbeitsordner (Pfad):', ev.current || '');
         if (p) send({ cmd: 'set_folder', path: p });
