@@ -161,6 +161,8 @@ nur das Claude-Backend.
 3. Will Claude ein Werkzeug benutzen (Datei schreiben, Befehl ausführen), erscheint eine Frage im Chat
    mit **Erlauben / Ablehnen**. Mit dem Menü „Berechtigungen“ lässt sich das vorab einstellen.
 4. **■** bricht eine laufende Antwort ab. **Neuer Chat** beginnt eine frische Sitzung.
+   Während eine Antwort läuft, kannst du weiter fragen: Die nächste Frage wird gestrichelt als „wartet“ angezeigt und
+   direkt nach der laufenden Antwort beantwortet (Claude Code reiht sie selbst ein, lokale Modelle über RichTerm).
 5. **Anhänge:** Bilder, Screenshots und Dateien ins Fenster ziehen, mit Ctrl+V einfügen oder über 📎 wählen, ohne
    Größenlimit. Alles landet in `rag/self_data/` im Arbeitsordner (wird mit indexiert, steht also auch späteren Fragen
    zur Verfügung). Claude sieht Bilder direkt; sehr große Bilder werden für die Übertragung verkleinert.

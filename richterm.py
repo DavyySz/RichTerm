@@ -413,10 +413,28 @@ class OllamaSession:
         msg = {'role': 'user', 'content': text}
         if images:
             msg['images'] = images            # base64, für multimodale Modelle (z.B. llava, qwen2.5vl)
-        self.messages.append(msg)
         self.history.append(('Nutzer', text))
         self.stop = False
-        threading.Thread(target=self._run, daemon=True).start()
+        # Warteschlange: ein Modell beantwortet eine Frage nach der anderen
+        if not hasattr(self, 'queue'):
+            self.queue, self.running = [], False
+        self.queue.append(msg)
+        self._next()
+
+    def _next(self):
+        if getattr(self, 'running', False) or not getattr(self, 'queue', None):
+            return
+        self.running = True
+        self.messages.append(self.queue.pop(0))
+        threading.Thread(target=self._run_wrapped, daemon=True).start()
+
+    def _run_wrapped(self):
+        try:
+            self._run()
+        finally:
+            self.running = False
+            if not self.stop:
+                self._next()
 
     def _run(self):
         import urllib.request
@@ -567,7 +585,24 @@ class CommandSession:
     def send_user(self, content):
         text, _ = content_to_text_and_images(content)
         self.history.append(('Nutzer', text))
-        threading.Thread(target=self._run, daemon=True).start()
+        if not hasattr(self, 'queue'):
+            self.queue, self.running = [], False
+        self.queue.append(text)
+        self._next()
+
+    def _next(self):
+        if getattr(self, 'running', False) or not getattr(self, 'queue', None):
+            return
+        self.running = True
+        self.queue.pop(0)
+        threading.Thread(target=self._run_wrapped, daemon=True).start()
+
+    def _run_wrapped(self):
+        try:
+            self._run()
+        finally:
+            self.running = False
+            self._next()
 
     def _transcript(self):
         lines = ['SYSTEM:\n' + self.system_prompt, '']
@@ -1756,8 +1791,12 @@ class Core:
         if m.get('type') == 'system' and m.get('subtype') == 'init' and m.get('session_id'):
             self.remember_session(m['session_id'])
         if m.get('type') == 'result':
-            user, text, tools = self.recorder.user, self.recorder.text(), list(self.recorder.tools)
+            q = getattr(self, 'user_queue', None) or []
+            user = q.pop(0) if q else self.recorder.user
+            text, tools = self.recorder.text(), list(self.recorder.tools)
             self.recorder.reset()
+            if q:
+                self.recorder.user = q[0]      # nächste wartende Frage wird jetzt beantwortet
             label = self.backend_label()
             threading.Thread(target=self.history.append_turn, args=(user, text, tools, label), daemon=True).start()
             if self.history.needs_compaction():
@@ -1971,9 +2010,13 @@ class Core:
             except Exception as e:  # noqa: BLE001
                 self.chat_event({'type': 'error', 'text': str(e)})
                 return
-        self.recorder.reset()
-        self.recorder.user = shown
-        self.chat_event({'type': 'user_sent', 'text': shown, 'sources': sources,
+        if not getattr(self, 'user_queue', None):
+            self.user_queue = []
+        self.user_queue.append(shown)
+        if len(self.user_queue) == 1:
+            self.recorder.reset()
+            self.recorder.user = shown
+        self.chat_event({'type': 'user_sent', 'text': shown, 'sources': sources, 'queued': len(self.user_queue) > 1,
                          'images': [b['source']['data'] and ('data:%s;base64,%s' % (b['source']['media_type'], b['source']['data'])) for b in blocks]})
         self.session.send_user(content)
 
@@ -1987,6 +2030,7 @@ class Core:
         return False
 
     def end_session(self):
+        self.user_queue = []
         if self.session:
             s, self.session = self.session, None
             s.close()

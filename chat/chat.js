@@ -9,6 +9,7 @@
   let counter = 0;
   let current = null;          // laufende Assistenten-Nachricht {el, bubble, text, blocks:{index:{kind,text,el}}}
   let lastQuestion = '';
+  let pendingCount = 0;        // gesendete, noch nicht beantwortete Fragen
   let attachments = [];        // {name, mime, data?|path?}
   let busy = false;
 
@@ -71,7 +72,7 @@
     return '/file' + (cwd === '~' ? '' : cwd) + '/' + p;
   }
   function setStatus(s) { statusText.textContent = s || ''; }
-  function setBusy(b) { busy = b; $('btn-stop').hidden = !b; $('btn-send').hidden = b; }
+  function setBusy(b) { busy = b; $('btn-stop').hidden = !b; }
 
   // ---------- Hintergrundbild ----------
   let bgId = '', bgDim = 0.5;
@@ -280,9 +281,10 @@
     return { el, bubble };
   }
 
-  function addUser(text, images, sources) {
+  function addUser(text, images, sources, queued) {
     const m = addMessage('user');
     m.bubble.textContent = text;
+    if (queued) { m.el.classList.add('queued'); const q = document.createElement('div'); q.className = 'queued-label'; q.textContent = 'wartet, bis die laufende Antwort fertig ist'; m.el.appendChild(q); }
     for (const src of images || []) {
       const img = document.createElement('img'); img.src = src; img.className = 'user-img';
       m.bubble.appendChild(img);
@@ -297,6 +299,8 @@
 
   function ensureAssistant() {
     if (!current) {
+      const q = messages.querySelector('.msg.user.queued');
+      if (q) { q.classList.remove('queued'); const l = q.querySelector('.queued-label'); if (l) l.remove(); }
       const m = addMessage('assistant');
       current = { el: m.el, bubble: m.bubble, blocks: {}, order: [] };
     }
@@ -371,7 +375,7 @@
   function addActions(msgEl, md, question) {
     const t = $('tpl-actions').content.cloneNode(true);
     const bar = t.querySelector('.actions');
-    bar.querySelectorAll('button[data-prompt]').forEach(b => { b.onclick = () => { if (!busy) send({ cmd: 'send', text: b.dataset.prompt }); }; });
+    bar.querySelectorAll('button[data-prompt]').forEach(b => { b.onclick = () => send({ cmd: 'send', text: b.dataset.prompt }); });
     bar.querySelector('.save-note').onclick = (e) => { send({ cmd: 'save_note', text: md, question }); e.target.textContent = 'Gespeichert ✓'; };
     msgEl.appendChild(bar);
   }
@@ -470,7 +474,7 @@
         break;
       }
       case 'models': fillModels(ev.models || [], ev.current || 'claude:'); break;
-      case 'user_sent': addUser(ev.text, ev.images, ev.sources); lastQuestion = ev.text; setBusy(true); setStatus('Die KI arbeitet …'); break;
+      case 'user_sent': addUser(ev.text, ev.images, ev.sources, ev.queued); lastQuestion = ev.text; pendingCount += 1; setBusy(true); setStatus(pendingCount > 1 ? 'Die KI arbeitet … (' + (pendingCount - 1) + ' Frage(n) wartet)' : 'Die KI arbeitet …'); break;
       case 'status': setStatus(ev.text); break;
       case 'error': { const m = addMessage('assistant'); m.bubble.innerHTML = '<div class="error">' + escapeHtml(ev.text) + '</div>'; setBusy(false); break; }
       case 'claude': handleClaude(ev.msg); break;
@@ -536,7 +540,8 @@
     }
     if (m.type === 'result') {
       finishAssistant();
-      setBusy(false);
+      pendingCount = Math.max(0, pendingCount - 1);
+      setBusy(pendingCount > 0);
       const cost = m.total_cost_usd ? ' · ' + m.total_cost_usd.toFixed(3) + ' $' : '';
       const secs = m.duration_ms ? (m.duration_ms / 1000).toFixed(1) + ' s' : '';
       setStatus((m.is_error ? 'Fehler: ' + (m.result || '') : 'Fertig') + (secs ? ' · ' + secs : '') + cost);
@@ -609,7 +614,7 @@
   // ---------- Eingabe ----------
   function submit() {
     const text = input.value.trim();
-    if ((!text && !attachments.length) || busy) return;
+    if (!text && !attachments.length) return;          // auch während einer laufenden Antwort erlaubt (wird eingereiht)
     if (attachments.some(a => a.pending)) { setStatus('Anhänge werden noch hochgeladen …'); return; }
     input.value = ''; autosize();
     send({ cmd: 'send', text, attachments: attachments.map(a => ({ name: a.name, mime: a.mime, path: a.path })) });
@@ -631,7 +636,7 @@
   window.addEventListener('resize', autosize);
   $('btn-send').onclick = submit;
   $('btn-stop').onclick = () => send({ cmd: 'interrupt' });
-  $('btn-new').onclick = () => { send({ cmd: 'new' }); messages.querySelectorAll('.msg').forEach(m => m.remove()); $('welcome').hidden = false; current = null; setBusy(false); };
+  $('btn-new').onclick = () => { send({ cmd: 'new' }); messages.querySelectorAll('.msg').forEach(m => m.remove()); $('welcome').hidden = false; current = null; pendingCount = 0; setBusy(false); };
   $('btn-folder').onclick = () => send({ cmd: 'choose_folder' });
   $('btn-profile').onclick = () => send({ cmd: 'profile_edit' });
   $('btn-reload').onclick = () => send({ cmd: 'profile_reload' });
