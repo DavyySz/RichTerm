@@ -367,8 +367,8 @@
 
   function ensureAssistant() {
     if (!current) {
-      const q = messages.querySelector('.msg.user.queued');
-      if (q) { q.classList.remove('queued'); const l = q.querySelector('.queued-label'); if (l) l.remove(); }
+      messages.querySelectorAll('.msg.user.queued').forEach(q => { q.classList.remove('queued'); const l = q.querySelector('.queued-label'); if (l) l.remove(); });
+      if (!busy) setBusy(true);   // Antwort läuft, auch wenn die Zählung es nicht wusste
       const m = addMessage('assistant');
       current = { el: m.el, bubble: m.bubble, blocks: {}, order: [] };
     }
@@ -574,6 +574,7 @@
       }
       case 'models': fillModels(ev.models || [], ev.current || 'claude:'); break;
       case 'user_sent': addUser(ev.text, ev.images, ev.sources, ev.queued); lastQuestion = ev.text; pendingCount += 1; setBusy(true); break;
+      case 'pending': pendingCount = ev.count; break;   // die App weiß, wie viele Fragen noch offen sind
       case 'status': setStatus(ev.text); break;
       case 'error': { const m = addMessage('assistant'); m.bubble.innerHTML = '<div class="error">' + escapeHtml(ev.text) + '</div>'; setBusy(false); break; }
       case 'claude': handleClaude(ev.msg); break;
@@ -639,7 +640,6 @@
     }
     if (m.type === 'result') {
       finishAssistant();
-      pendingCount = Math.max(0, pendingCount - 1);
       setBusy(pendingCount > 0);
       const cost = m.total_cost_usd ? ' · ' + m.total_cost_usd.toFixed(3) + ' $' : '';
       const secs = m.duration_ms ? (m.duration_ms / 1000).toFixed(1) + ' s' : '';

@@ -23,6 +23,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote, urlparse
 
@@ -443,25 +444,8 @@ class OllamaSession:
             self.on_message({'type': 'result', 'is_error': True,
                              'result': 'Ollama ist nicht verfügbar (erwartet unter %s).' % OLLAMA_LOCAL})
             return
-        # Alle physischen Kerne nutzen: Ollama erkennt bei Hybrid-CPUs (z.B. i5-1235U) sonst nur die
-        # Performance-Kerne und rechnet auf 2 statt 10 Kernen.
-        threads = os.cpu_count() or 4
-        try:
-            import re as _re
-            cores = set()
-            for d in os.listdir('/sys/devices/system/cpu'):
-                if _re.fullmatch(r'cpu\d+', d):
-                    try:
-                        with open('/sys/devices/system/cpu/%s/topology/core_cpus_list' % d) as fh:
-                            cores.add(fh.read().strip())
-                    except OSError:
-                        pass
-            if cores:
-                threads = len(cores)
-        except OSError:
-            pass
         payload = {'model': self.model, 'messages': self.messages, 'stream': True,
-                   'options': {'num_ctx': 8192, 'num_thread': threads}}
+                   'options': {'num_ctx': 8192, 'num_thread': physical_cores()}}
         if self.think in ('on', 'off'):
             payload['think'] = self.think == 'on'
         self.on_message({'type': 'system', 'subtype': 'status', 'status': 'ollama_thinking',
@@ -772,6 +756,27 @@ def ollama_host():
     return OLLAMA_HOST if exe == OLLAMA_LOCAL else os.environ.get('OLLAMA_HOST', '127.0.0.1:11434')
 
 
+def physical_cores():
+    """Anzahl physischer Kerne. Ollama erkennt bei Hybrid-CPUs (z.B. i5-1235U) sonst nur die
+    Performance-Kerne und rechnet auf 2 statt 10 Kernen."""
+    threads = os.cpu_count() or 4
+    try:
+        import re as _re
+        cores = set()
+        for d in os.listdir('/sys/devices/system/cpu'):
+            if _re.fullmatch(r'cpu\d+', d):
+                try:
+                    with open('/sys/devices/system/cpu/%s/topology/core_cpus_list' % d) as fh:
+                        cores.add(fh.read().strip())
+                except OSError:
+                    pass
+        if cores:
+            threads = len(cores)
+    except OSError:
+        pass
+    return threads
+
+
 def embed_texts(texts, timeout=300, query=False):
     """Einbettungen über Ollama (EMBED_MODEL). -> Liste von Vektoren oder None, wenn nicht verfügbar."""
     import urllib.request
@@ -781,7 +786,8 @@ def embed_texts(texts, timeout=300, query=False):
     try:
         if not ensure_ollama_running(timeout=8):
             return None
-        body = json.dumps({'model': EMBED_MODEL, 'input': texts}).encode('utf-8')
+        body = json.dumps({'model': EMBED_MODEL, 'input': texts,
+                           'options': {'num_thread': physical_cores()}}).encode('utf-8')
         req = urllib.request.Request('http://%s/api/embed' % ollama_host(), data=body,
                                      headers={'Content-Type': 'application/json'})
         with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -922,6 +928,7 @@ class Rag:
         if not todo:
             return False
         done = total - len(todo)
+        last_save = time.time()
         for i in range(0, len(todo), 16):
             batch = todo[i:i + 16]
             vecs = embed_texts([c['text'] for c in batch])
@@ -931,8 +938,10 @@ class Rag:
                 for c, v in zip(batch, vecs):
                     c['vec'] = v
                 done += len(batch)
-                if i % 64 == 0 or done == total:
+                # Zwischenstand sichern, aber nicht zu oft: der Index wird mit Vektoren groß (zig MB)
+                if time.time() - last_save > 60 or done == total:
                     self._save_index()
+                    last_save = time.time()
             if progress:
                 progress(done, total)
         with self.lock:
@@ -1790,9 +1799,17 @@ class Core:
         self.recorder.feed(m)
         if m.get('type') == 'system' and m.get('subtype') == 'init' and m.get('session_id'):
             self.remember_session(m['session_id'])
+        q = getattr(self, 'user_queue', None) or []
+        if m.get('type') in ('assistant', 'stream_event', 'user') and not getattr(self, 'turn_open', False):
+            # Ein Durchgang beginnt. Claude Code fasst alle Fragen, die bis hierhin eingereiht wurden,
+            # zu EINEM Durchgang mit EINEM result zusammen; lokale Modelle beantworten eine nach der anderen.
+            self.turn_open = True
+            self.turn_size = max(1, len(q)) if isinstance(self.session, ClaudeSession) else 1
         if m.get('type') == 'result':
-            q = getattr(self, 'user_queue', None) or []
-            user = q.pop(0) if q else self.recorder.user
+            n = getattr(self, 'turn_size', 1) if getattr(self, 'turn_open', False) else 1
+            batch, q[:] = q[:n], q[n:]
+            self.turn_open = False
+            user = '\n\n'.join(batch) if batch else self.recorder.user
             text, tools = self.recorder.text(), list(self.recorder.tools)
             self.recorder.reset()
             if q:
@@ -1801,6 +1818,7 @@ class Core:
             threading.Thread(target=self.history.append_turn, args=(user, text, tools, label), daemon=True).start()
             if self.history.needs_compaction():
                 threading.Thread(target=self.compact_history, daemon=True).start()
+            self.chat_event({'type': 'pending', 'count': len(q)})   # verbindlicher Zählstand für die Anzeige
         return self.chat_event({'type': 'claude', 'msg': m})
 
     def compact_history(self):
@@ -2031,6 +2049,7 @@ class Core:
 
     def end_session(self):
         self.user_queue = []
+        self.turn_open = False
         if self.session:
             s, self.session = self.session, None
             s.close()
