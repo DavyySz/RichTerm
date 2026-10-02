@@ -405,7 +405,8 @@
   }
   function scheduleRender(block) {
     if (renderTimer) return;
-    const wait = Math.max(300, 1500 - (performance.now() - lastFull));
+    // Formatierung läuft im Worker, daher darf sie häufig kommen (~0,4 s), ohne den Hauptthread zu bremsen
+    const wait = Math.max(150, 400 - (performance.now() - lastFull));
     renderTimer = setTimeout(() => {
       renderTimer = null;
       if (block.done || !block.el || block.rendering) { if (block.rendering && !block.done) scheduleRender(block); return; }
