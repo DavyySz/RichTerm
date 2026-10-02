@@ -245,3 +245,7 @@ body.has-bg .tool { background: color-mix(in srgb, var(--surface) 70%, transpare
 /* wartende Fragen */
 .msg.user.queued .bubble { opacity: 0.75; border-style: dashed; }
 .queued-label { text-align: right; font-family: var(--ui-font); font-size: 11.5px; color: var(--ink-soft); margin-top: 3px; }
+
+/* noch nicht formatierter Text beim Streamen */
+.stream-tail { white-space: pre-wrap; }
+.stream-tail:empty { display: none; }

@@ -339,29 +339,40 @@
     return current;
   }
 
-  let renderTimer = null, lastRenderCost = 0, lastMathRender = 0;
+  // Streaming-Strategie: neuer Text wird nur angehängt (billig); das teure Formatieren (Markdown,
+  // Formeln) läuft höchstens alle 1,5 s in einer Leerlauf-Phase des Browsers und am Ende endgültig.
+  let renderTimer = null, lastFull = 0;
+  function appendStream(block, text) {
+    if (!block.el) return;
+    if (!block.tail) { block.tail = document.createElement('div'); block.tail.className = 'stream-tail'; block.el.appendChild(block.tail); }
+    block.tail.appendChild(document.createTextNode(text));
+    scrollDown(false, true);
+    scheduleRender(block);
+  }
+  function fullRender(block, final) {
+    if (!block.el) return;
+    block.tail = null;
+    block.renderedLen = block.text.length;
+    renderMarkdown(block.text, block.el, final, true);
+    if (!final) { block.tail = document.createElement('div'); block.tail.className = 'stream-tail'; block.el.appendChild(block.tail); }
+    scrollDown(false, true);
+  }
   function scheduleRender(block) {
     if (renderTimer) return;
-    // Intervall an die Kosten des letzten Renderns anpassen: lange Antworten seltener neu zeichnen
-    const delay = Math.min(600, Math.max(120, lastRenderCost * 4));
+    const wait = Math.max(300, 1500 - (performance.now() - lastFull));
     renderTimer = setTimeout(() => {
       renderTimer = null;
-      if (block.el && !block.done) {
-        const t0 = performance.now();
-        const withMath = (t0 - lastMathRender) > 1000;      // Formeln höchstens einmal pro Sekunde setzen
-        renderMarkdown(block.text, block.el, false, withMath);
-        if (withMath) lastMathRender = t0;
-        lastRenderCost = performance.now() - t0;
-      }
-      scrollDown(false, true);
-    }, delay);
+      if (block.done || !block.el) return;
+      const run = () => { if (!block.done) { lastFull = performance.now(); fullRender(block, false); } };
+      if (window.requestIdleCallback) requestIdleCallback(run, { timeout: 800 }); else run();
+    }, wait);
   }
   function cancelRender() { if (renderTimer) { clearTimeout(renderTimer); renderTimer = null; } }
   function finalizeBlock(b) {
-    // endgültige Darstellung (mit Diagrammen, Vorschauen, Hervorhebung); keine verzögerte Zwischen-Darstellung mehr danach
+    // endgültige Darstellung (mit Diagrammen, Vorschauen, Hervorhebung)
     cancelRender();
     b.done = true;
-    if (b.el) renderMarkdown(b.text, b.el, true);
+    fullRender(b, true);
   }
 
   function blockFor(index, kind) {
@@ -538,7 +549,7 @@
         else if (cb.type === 'thinking') blockFor(e.index, 'thinking');
       } else if (e.type === 'content_block_delta') {
         const d = e.delta;
-        if (d.type === 'text_delta') { const b = blockFor(e.index, 'text'); b.text += d.text; scheduleRender(b); }
+        if (d.type === 'text_delta') { const b = blockFor(e.index, 'text'); b.text += d.text; appendStream(b, d.text); }
         else if (d.type === 'thinking_delta' && d.thinking) {
           const b = blockFor(e.index, 'thinking'); b.text += d.thinking;
           const t = b.el && b.el.querySelector('.thinking-text'); if (t) { t.textContent = b.text; scrollDown(); }
