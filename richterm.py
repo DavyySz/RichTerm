@@ -1259,7 +1259,7 @@ class Receiver(BaseHTTPRequestHandler):
             return self._send_file('/' + path[len('/file/'):])
         if path.startswith('/html/'):
             return self._send_file(os.path.join(HTML_DIR, os.path.basename(path)))
-        if path.startswith(('/chat/', '/vendor/')):
+        if path.startswith(('/chat/', '/vendor/', '/icon/')):
             full = os.path.normpath(os.path.join(HERE, path.lstrip('/')))
             if full.startswith(HERE):
                 return self._send_file(full)
@@ -1863,6 +1863,10 @@ class NativeMixin(Core):
 
     def __init__(self, start_dir=None):
         Gtk.Window.__init__(self, title='RichTerm')
+        try:
+            self.set_icon_from_file(os.path.join(HERE, 'icon', 'richterm-256.png'))
+        except Exception:  # noqa: BLE001
+            pass
         self.init_core(start_dir)
         self.set_default_size(*self.cfg['window'])
         self.connect('destroy', self.on_quit)

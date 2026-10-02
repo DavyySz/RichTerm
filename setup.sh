@@ -112,13 +112,23 @@ make_links() {
     claude_md_hint
     return 0
   fi
+  # Icon ins Icon-Theme des Nutzers, dann ist es überall (Menü, Taskleiste, Fenster) verfügbar
+  for sz in 16 32 48 64 128 256 512; do
+    mkdir -p "$HOME/.local/share/icons/hicolor/${sz}x${sz}/apps"
+    cp "$DIR/icon/richterm-$sz.png" "$HOME/.local/share/icons/hicolor/${sz}x${sz}/apps/richterm.png" 2>/dev/null
+  done
+  mkdir -p "$HOME/.local/share/icons/hicolor/scalable/apps"
+  cp "$DIR/icon/richterm.svg" "$HOME/.local/share/icons/hicolor/scalable/apps/richterm.svg" 2>/dev/null
+  command -v gtk-update-icon-cache >/dev/null && gtk-update-icon-cache -q -t "$HOME/.local/share/icons/hicolor" 2>/dev/null
+  # Projektordner bekommt dasselbe Icon im Dateimanager
+  command -v gio >/dev/null && gio set "$DIR" metadata::custom-icon "file://$DIR/icon/richterm-256.png" 2>/dev/null
   cat > "$APPS/richterm.desktop" <<EOF
 [Desktop Entry]
 Type=Application
 Name=RichTerm
 Comment=Chat mit Claude Code: Formeln, Diagramme, Animationen – plus Terminal
 Exec=$DIR/start.sh $HOME
-Icon=utilities-terminal
+Icon=richterm
 Terminal=false
 Categories=Development;Education;TerminalEmulator;
 EOF
@@ -126,8 +136,8 @@ EOF
   ok "Menü- und Desktop-Eintrag"
   if command -v nemo >/dev/null; then
     mkdir -p "$HOME/.local/share/nemo/actions"
-    printf '[Nemo Action]\nName=RichTerm hier öffnen\nComment=Claude-Chat mit diesem Ordner starten\nExec=<richterm %%F>\nIcon-Name=utilities-terminal\nSelection=none\nExtensions=dir;\nQuote=double\n' > "$HOME/.local/share/nemo/actions/richterm.nemo_action"
-    printf '[Nemo Action]\nName=RichTerm in diesem Ordner öffnen\nComment=Claude-Chat mit dem gewählten Ordner starten\nExec=<richterm %%F>\nIcon-Name=utilities-terminal\nSelection=s\nExtensions=dir;\nQuote=double\n' > "$HOME/.local/share/nemo/actions/richterm-folder.nemo_action"
+    printf '[Nemo Action]\nName=RichTerm hier öffnen\nComment=Claude-Chat mit diesem Ordner starten\nExec=<richterm %%F>\nIcon-Name=richterm\nSelection=none\nExtensions=dir;\nQuote=double\n' > "$HOME/.local/share/nemo/actions/richterm.nemo_action"
+    printf '[Nemo Action]\nName=RichTerm in diesem Ordner öffnen\nComment=Claude-Chat mit dem gewählten Ordner starten\nExec=<richterm %%F>\nIcon-Name=richterm\nSelection=s\nExtensions=dir;\nQuote=double\n' > "$HOME/.local/share/nemo/actions/richterm-folder.nemo_action"
     ok "Rechtsklick-Eintrag im Dateimanager (Nemo)"
   fi
   claude_md_hint

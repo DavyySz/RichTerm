@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3a3f47"/>
+      <stop offset="1" stop-color="#23272e"/>
+    </linearGradient>
+    <linearGradient id="bubble" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8fd6dd"/>
+      <stop offset="1" stop-color="#5fb3bb"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="6" stdDeviation="6" flood-color="#000" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+  <!-- Hintergrund: abgerundetes Quadrat -->
+  <rect x="12" y="12" width="232" height="232" rx="52" fill="url(#bg)"/>
+  <rect x="12" y="12" width="232" height="232" rx="52" fill="none" stroke="#5c646f" stroke-width="3"/>
+  <!-- Terminal-Prompt unten links -->
+  <g fill="none" stroke="#e8e6e1" stroke-width="16" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M52 150 L92 186 L52 222"/>
+    <path d="M112 222 L160 222"/>
+  </g>
+  <!-- Sprechblase oben rechts mit Formel -->
+  <g filter="url(#shadow)">
+    <path d="M118 44 h92 a26 26 0 0 1 26 26 v56 a26 26 0 0 1 -26 26 h-52 l-30 24 v-24 h-10 a26 26 0 0 1 -26 -26 v-56 a26 26 0 0 1 26 -26 z" fill="url(#bubble)"/>
+  </g>
+  <text x="162" y="118" font-family="DejaVu Serif, Georgia, serif" font-size="66" font-style="italic" text-anchor="middle" fill="#14262a">∑</text>
+  <text x="200" y="84" font-family="DejaVu Serif, Georgia, serif" font-size="26" font-style="italic" text-anchor="middle" fill="#14262a">n</text>
+  <text x="162" y="150" font-family="DejaVu Serif, Georgia, serif" font-size="22" font-style="italic" text-anchor="middle" fill="#14262a">i=1</text>
+</svg>
