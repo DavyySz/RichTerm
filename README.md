@@ -82,19 +82,44 @@ es jedes Mal erklären musst.
 
 ## Unterlagen: der Ordner `rag/`
 
-Beim ersten Start wird **`rag/`** im Arbeitsordner angelegt. Lege Vorlesungsfolien, Skripte, Übungen oder Notizen hinein (PDF, Markdown, Text,
-DOCX, HTML, Code). RichTerm zerlegt sie in Abschnitte (PDFs seitenweise) und gibt der KI zu jeder Frage die
-passendsten Abschnitte mit Quellenangabe mit; die Antwort zitiert dann „laut vorlesung_03.pdf S. 4“. Unter
-deiner Frage steht, welche Unterlagen verwendet wurden. Das funktioniert mit jedem Modell, auch lokal, und
-die Dateien bleiben, wo sie sind. Neue oder geänderte Dateien werden automatisch neu indexiert
-(Index: `rag/.richterm-index.json`). Für PDFs wird `pdftotext` gebraucht (Paket `poppler-utils`, macOS `brew install poppler`).
-Die Suche ist **hybrid**: Stichwörter (BM25) plus Bedeutung über ein kleines lokales Einbettungsmodell
-(`embeddinggemma`, 620 MB, wird beim ersten Mal automatisch über Ollama geladen); „Schrittweite“ findet so auch
-„Lernrate“, und Fragen ohne Bezug zu den Unterlagen liefern keine Treffer. Wie streng, wählst du im Menü
-**Unterlagen** in der Kopfzeile: *aus* · *ergänzend* (Standard: Unterlagen als Hauptquelle, eigenes Wissen gekennzeichnet)
-· *nur daraus* (ausschließlich aus den Unterlagen, sonst „dazu steht nichts in den Unterlagen“). Gilt pro Ordner. `@vorlesung_03.pdf` in der
-Frage gibt die ganze Datei mit, z. B. für Zusammenfassungen. Unterordner werden immer mit durchsucht; `rag <ordner>` oder
-`rag <datei>` am Anfang der Frage beschränkt die Suche auf diesen Teil (`rag mcts Welche Phasen …`).
+Das Herzstück fürs Lernen mit Vorlesungsfolien. Die KI bekommt zu jeder Frage die passenden Stellen aus deinen
+Unterlagen mit und zitiert sie, egal ob Claude oder ein lokales Modell antwortet.
+
+**So geht's:**
+
+1. `richterm` im Arbeitsordner starten. Der Ordner `rag/` wird dabei angelegt (mit einer kurzen LIES-MICH.txt).
+2. Folien, Skripte, Übungen, Notizen nach `rag/` kopieren: PDF, Markdown, Text, DOCX, HTML, Code. Unterordner sind
+   erlaubt und werden immer mit durchsucht, z. B. `rag/maschinelles_lernen/kapitel_3/`.
+3. Fragen stellen. Unter deiner Frage steht „📚 Unterlagen: vorlesung_03.pdf S. 4 · notizen.md“, die Antwort sagt
+   „laut vorlesung_03.pdf S. 4 …“. Fehlt die 📚-Zeile, wurde nichts Passendes gefunden.
+
+**Wie streng?** Menü **Unterlagen** in der Kopfzeile (gilt pro Ordner, wird gespeichert):
+
+| Einstellung | Verhalten |
+|---|---|
+| Unterlagen: aus | `rag/` wird ignoriert. |
+| Unterlagen: ergänzend *(Standard)* | Unterlagen sind die Hauptquelle, eigenes Wissen darf ergänzt werden und wird gekennzeichnet. |
+| Unterlagen: nur daraus | Streng: nur aus den Unterlagen, jede Aussage mit Quelle; sonst „dazu steht nichts in den Unterlagen“. |
+
+**Gezielt fragen:**
+
+| Eingabe | Durchsucht |
+|---|---|
+| `Was ist die Lernrate?` | alles in `rag/`, inklusive Unterordner |
+| `rag kapitel_3 Was ist die Lernrate?` | nur den Ordner `kapitel_3` (mit Unterordnern) |
+| `rag kapitel_3/folien.pdf Was ist die Lernrate?` | nur diese Datei |
+| `rag folien Was …` / `rag mcts Was …` | Ordner- oder Dateiname reicht, ohne vollen Pfad; mehrere Angaben möglich |
+| `Fasse @folien.pdf zusammen` | gibt die **ganze Datei** mit statt nur Treffer (für Zusammenfassungen) |
+
+**Was im Hintergrund passiert:** Dateien werden in Abschnitte zerlegt (PDFs seitenweise) und in `rag/.richterm-index.json`
+indexiert; neue oder geänderte Dateien werden automatisch erkannt. Die Suche ist hybrid: Stichwörter (BM25) plus
+Bedeutung über ein kleines lokales Einbettungsmodell (`embeddinggemma`, 620 MB, wird beim ersten Mal automatisch
+über Ollama geladen und rechnet im Hintergrund; bis dahin läuft die Stichwortsuche). So findet „Schrittweite“ auch
+eine Folie mit „Lernrate“, und Fragen ohne Bezug zu den Unterlagen („Hauptstadt von Peru“) liefern keine Treffer.
+Die Dateien bleiben, wo sie sind; das Modell sieht nur die passenden Ausschnitte.
+
+Voraussetzung für PDFs: `pdftotext` (Linux-Paket `poppler-utils`, meist vorhanden; macOS `brew install poppler`).
+Im Profil: `rag_chunks` (Standard 6) = Abschnitte pro Frage, `rag: false` schaltet alles ab.
 
 ## Gedächtnis: `richterm-verlauf.md`
 
