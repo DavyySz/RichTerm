@@ -71,8 +71,37 @@
     if (p.startsWith('/')) return '/file' + p;
     return '/file' + (cwd === '~' ? '' : cwd) + '/' + p;
   }
-  function setStatus(s) { statusText.textContent = s || ''; }
-  function setBusy(b) { busy = b; $('btn-stop').hidden = !b; }
+  function setStatus(s) {
+    if (actTimer && s && !/^(Fertig|Fehler)/.test(s)) { setActivityNote(s.replace(/…$/, '').slice(0, 60)); return; }
+    statusText.textContent = s || '';
+  }
+  // ---------- Aktivitätsanzeige (wie bei Claude Code: Wort + Ladepunkte + Zeit) ----------
+  const WORDS = ['Bombadillering', 'Bananatutmosing', 'Drehwilfriding', 'Apericororing', 'Frühslingeringering',
+    'Malantiwiehsering', 'Bollerwagenfelipporihing', 'Schwabbleldingoring', 'Pupseringering', 'Rollokollorioring',
+    'Pillerbombadillering', 'Pullerbombadullerihinging', 'Schwabblebajonikelering', 'Drröschschösching',
+    'Soossaasseesering', 'Loooollololing'];
+  const SPIN = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+  let actTimer = null, actStart = 0, actWord = '', actTick = 0, actNote = '';
+  function pickWord() { let w; do { w = WORDS[Math.floor(Math.random() * WORDS.length)]; } while (w === actWord && WORDS.length > 1); actWord = w; }
+  function activityText() {
+    const secs = Math.floor((Date.now() - actStart) / 1000);
+    const dots = '.'.repeat(1 + (actTick % 3));
+    const wait = pendingCount > 1 ? ' · ' + (pendingCount - 1) + ' Frage(n) wartet' : '';
+    return SPIN[actTick % SPIN.length] + ' ' + actWord + dots + ' (' + secs + ' s' + (actNote ? ' · ' + actNote : '') + ')' + wait;
+  }
+  function startActivity() {
+    if (actTimer) return;
+    actStart = Date.now(); actTick = 0; actNote = ''; pickWord();
+    statusText.textContent = activityText();
+    actTimer = setInterval(() => {
+      actTick += 1;
+      if (actTick % 30 === 0) pickWord();           // alle ~3 s ein neues Wort
+      statusText.textContent = activityText();
+    }, 100);
+  }
+  function stopActivity() { if (actTimer) { clearInterval(actTimer); actTimer = null; } }
+  function setActivityNote(n) { actNote = n; }
+  function setBusy(b) { busy = b; $('btn-stop').hidden = !b; if (b) startActivity(); else stopActivity(); }
 
   // ---------- Hintergrundbild ----------
   let bgId = '', bgDim = 0.5;
@@ -354,6 +383,8 @@
       '</span><div class="detail">' + escapeHtml(JSON.stringify(i, null, 1).slice(0, 4000)) + '</div>';
     el.onclick = () => el.classList.toggle('open');
     a.bubble.appendChild(el);
+    const verb = { Read: 'liest', Write: 'schreibt', Edit: 'bearbeitet', Bash: 'führt aus', Grep: 'durchsucht', Glob: 'sucht', WebSearch: 'sucht im Web', WebFetch: 'lädt' }[name] || name;
+    setActivityNote(verb + ' ' + summary.replace(/^[A-Za-z]+: /, '').slice(0, 40));
     scrollDown();
     return el;
   }
@@ -474,7 +505,7 @@
         break;
       }
       case 'models': fillModels(ev.models || [], ev.current || 'claude:'); break;
-      case 'user_sent': addUser(ev.text, ev.images, ev.sources, ev.queued); lastQuestion = ev.text; pendingCount += 1; setBusy(true); setStatus(pendingCount > 1 ? 'Die KI arbeitet … (' + (pendingCount - 1) + ' Frage(n) wartet)' : 'Die KI arbeitet …'); break;
+      case 'user_sent': addUser(ev.text, ev.images, ev.sources, ev.queued); lastQuestion = ev.text; pendingCount += 1; setBusy(true); break;
       case 'status': setStatus(ev.text); break;
       case 'error': { const m = addMessage('assistant'); m.bubble.innerHTML = '<div class="error">' + escapeHtml(ev.text) + '</div>'; setBusy(false); break; }
       case 'claude': handleClaude(ev.msg); break;
@@ -482,7 +513,7 @@
   };
 
   function handleClaude(m) {
-    if (m.type === 'system' && m.subtype === 'status' && m.text) { setStatus(m.text); return; }
+    if (m.type === 'system' && m.subtype === 'status' && m.text) { setActivityNote(m.text.replace(/…$/, '').slice(0, 60)); return; }
     if (m.type === 'system' && m.subtype === 'init') {
       setStatus('Sitzung ' + (m.model || '') + ' · ' + (m.cwd || ''));
       return;

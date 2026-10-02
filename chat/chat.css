@@ -149,7 +149,7 @@ pre:has(.code-tools) { padding-top: 26px; }
 }
 #composer .card:focus-within { border-color: color-mix(in srgb, var(--accent) 70%, transparent); box-shadow: 0 12px 34px rgba(0, 0, 0, 0.32), 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
 #composer .row { display: flex; gap: 8px; align-items: flex-end; }
-#status { font-family: var(--ui-font); font-size: 12px; color: var(--ink-soft); min-height: 14px; padding: 0 8px 6px; transition: opacity .2s ease; }
+#status { font-family: var(--ui-font); font-size: 12px; color: var(--ink-soft); min-height: 14px; padding: 0 8px 6px; transition: opacity .2s ease; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #status:empty { min-height: 0; padding-bottom: 0; }
 #input {
   flex: 1; resize: none; height: 42px; max-height: 40vh; overflow-y: hidden; padding: 10px 12px; border-radius: 12px; box-sizing: border-box;
