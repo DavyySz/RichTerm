@@ -154,6 +154,38 @@
     sel.value = current;
   }
 
+  // ---------- Render-Worker (eigener Thread für Markdown/KaTeX/Code) ----------
+  let worker = null, workerSeq = 0; const workerJobs = new Map();
+  try {
+    worker = new Worker('render-worker.js');
+    worker.onmessage = (e) => { const job = workerJobs.get(e.data.id); if (!job) return; workerJobs.delete(e.data.id); e.data.error ? job.reject(e.data.error) : job.resolve(e.data.html); };
+    worker.onerror = () => { worker = null; workerJobs.forEach(j => j.reject('worker')); workerJobs.clear(); };
+  } catch (e) { worker = null; }
+  function renderInWorker(src, final, withMath) {
+    if (!worker) return Promise.reject('kein Worker');
+    return new Promise((resolve, reject) => {
+      const id = ++workerSeq;
+      // Sicherung: antwortet der Worker nicht (hängt, Ladefehler), nach 4 s im Hauptthread rendern
+      const timer = setTimeout(() => { if (workerJobs.delete(id)) reject('timeout'); }, 4000);
+      workerJobs.set(id, { resolve: h => { clearTimeout(timer); resolve(h); }, reject: e => { clearTimeout(timer); reject(e); } });
+      worker.postMessage({ id, src, opts: { final, withMath, cwd, user: window.RT_USER || '' } });
+    });
+  }
+  // Nachbereitung im Hauptthread (braucht das DOM): Vorschauen, Diagramme, Kopierknöpfe
+  function postProcess(target, final) {
+    if (final) { target.querySelectorAll('.preview').forEach(setupPreview); renderMermaidIn(target); }
+    setupCopyButtons(target);
+  }
+  async function renderAsync(src, target, final = true, withMath = true) {
+    try {
+      const html = await renderInWorker(src, final, withMath);
+      target.innerHTML = html;
+      postProcess(target, final);
+    } catch (e) {
+      renderMarkdown(src, target, final, withMath);        // Rückfall: im Hauptthread
+    }
+  }
+
   // ---------- Markdown → HTML mit Formeln, Diagrammen, Vorschauen ----------
   const MATH_RE = /\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$(?!\s)[^$\n]+?(?<!\s)\$/g;
 
@@ -355,20 +387,29 @@
   }
   function fullRender(block, final) {
     if (!block.el) return;
-    block.tail = null;
-    block.renderedLen = block.text.length;
-    renderMarkdown(block.text, block.el, final, true);
-    if (!final) { block.tail = document.createElement('div'); block.tail.className = 'stream-tail'; block.el.appendChild(block.tail); }
-    scrollDown(false, true);
+    const text = block.text, len = text.length;
+    block.rendering = true;
+    renderAsync(text, block.el, final, true).then(() => {
+      block.rendering = false;
+      block.renderedLen = len;
+      block.tail = null;
+      if (!final || block.text.length > len) {
+        // Text, der während des Renderns dazukam, wieder als unformatierten Rest anhängen
+        block.tail = document.createElement('div'); block.tail.className = 'stream-tail';
+        block.tail.textContent = block.text.slice(len);
+        block.el.appendChild(block.tail);
+        if (final && block.text.length > len) fullRender(block, true);
+      }
+      scrollDown(false, true);
+    });
   }
   function scheduleRender(block) {
     if (renderTimer) return;
     const wait = Math.max(300, 1500 - (performance.now() - lastFull));
     renderTimer = setTimeout(() => {
       renderTimer = null;
-      if (block.done || !block.el) return;
-      const run = () => { if (!block.done) { lastFull = performance.now(); fullRender(block, false); } };
-      if (window.requestIdleCallback) requestIdleCallback(run, { timeout: 800 }); else run();
+      if (block.done || !block.el || block.rendering) { if (block.rendering && !block.done) scheduleRender(block); return; }
+      lastFull = performance.now(); fullRender(block, false);
     }, wait);
   }
   function cancelRender() { if (renderTimer) { clearTimeout(renderTimer); renderTimer = null; } }
@@ -452,7 +493,7 @@
         catch (e) { d.innerHTML = '<div class="error">' + escapeHtml(e.message) + '</div>'; }
         body.appendChild(d);
       }
-    } else if (msg.kind === 'md') renderMarkdown(c, body);
+    } else if (msg.kind === 'md') renderAsync(c, body);
     else if (msg.kind === 'image') body.innerHTML = '<img src="' + escapeHtml(toUrl(c)) + '?t=' + Date.now() + '">';
     else if (msg.kind === 'video') body.innerHTML = '<video src="' + escapeHtml(toUrl(c)) + '" controls autoplay loop muted style="max-width:100%"></video>';
     else if (msg.kind === 'html' || msg.kind === 'url') body.innerHTML = '<iframe src="' + escapeHtml(toUrl(c)) + '" style="height:' + (msg.height || 480) + 'px"></iframe>';
@@ -508,7 +549,7 @@
           for (const t of ev.replay) {
             const m = addMessage(t.role); m.el.classList.add('replay');
             if (t.role === 'user') { m.bubble.textContent = t.text; lastQuestion = t.text; }
-            else { renderMarkdown(t.text, m.bubble); addActions(m.el, t.text, lastQuestion); }
+            else { renderAsync(t.text, m.bubble); addActions(m.el, t.text, lastQuestion); }
           }
           const sep2 = document.createElement('div'); sep2.className = 'replay-sep'; sep2.textContent = 'Jetzt';
           messages.appendChild(sep2);
