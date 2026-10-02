@@ -105,6 +105,7 @@ Nutze das aktiv, wie in einem Lehrbuch oder einem guten Browser-Chat:
   interaktive Visualisierungen, Canvas-Grafiken und Simulationen (vollständige HTML-Dokumente mit eigenem
   Script, keine externen Ressourcen; Höhe per Kommentar <!-- height: 500 --> steuerbar).
 - Bilder, die du mit matplotlib o.ä. als Datei erzeugst, zeigst du mit ![Beschreibung](pfad/zur/datei.png).
+  Speichere sie hochauflösend (savefig(..., dpi=200) oder als SVG), die Anzeige läuft auch auf 4K-Bildschirmen.
 - Tabellen, Überschriften und Codeblöcke wie üblich in Markdown.
 Liegen Unterlagen im Ordner rag/, bekommst du zu jeder Frage passende Auszüge daraus mitgeliefert; stütze
 dich dann darauf und nenne die Quelle (Datei, Seite).

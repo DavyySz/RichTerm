@@ -237,3 +237,7 @@ body.has-bg .tool { background: color-mix(in srgb, var(--surface) 70%, transpare
 #messages::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--rule-strong) 55%, transparent); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
 #messages::-webkit-scrollbar-thumb:hover { background: var(--rule-strong); border: 2px solid transparent; background-clip: padding-box; }
 #messages::-webkit-scrollbar-track { background: transparent; }
+
+/* HiDPI: Bilder nie über ihre natürliche Größe hinaus vergrößern, SVG bevorzugt */
+.bubble img { max-width: min(100%, 100vw); height: auto; }
+#bg-layer { image-rendering: auto; }
